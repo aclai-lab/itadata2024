@@ -3,7 +3,7 @@ Pkg.activate(joinpath(@__DIR__))
 
 # cell 1
 using MLJ, ModalDecisionTrees
-using SoleDecisionTreeInterface, Sole
+using SoleDecisionTreeInterface, Sole, SoleData
 using CategoricalArrays
 using DataFrames, JLD2, CSV
 using Audio911
@@ -127,7 +127,7 @@ function afe(x::AbstractVector{Float64})
     return x_features
 end
 
-# cell 4
+# cell 4 - Compute audio features dataframes and labels
 colnames = [
     ["mel$i" for i in 1:26]...,
     ["mfcc$i" for i in 1:13]...,
@@ -140,60 +140,47 @@ for i in 1:nrow(x)
     push!(X, collect(eachcol(afe(x[i, :audio]))))
 end
 
-
-
 yc = CategoricalArray(y);
 
-# cell 6
+# cell 5 - Split dataset
 train_ratio = 0.8
-# Split dataset
-train, test = partition(eachindex(y), train_ratio, shuffle=true)
+train, test = partition(eachindex(yc), train_ratio, shuffle=true)
 X_train, y_train = X[train, :], yc[train]
 X_test, y_test = X[test, :], yc[test]
-
-
-# # Instantiate an MLJ machine based on a Modal Decision Tree with ≥ 4 samples at leaf
-# mach = machine(ModalDecisionTree(min_samples_leaf=4), X, y)
-# # Fit
-# fit!(mach, rows=train)
-
-
-
 
 println("Training set size: ", size(X_train), " - ", length(y_train))
 println("Test set size: ", size(X_test), " - ", length(y_test))
 
-# cell 7 - Train a model
+# cell 6 - Train a model
+
 learned_dt_tree = begin
-    # Tree = MLJ.@load DecisionTreeClassifier pkg=DecisionTree
-    # model = Tree(max_depth=-1, )
-    mach = machine(ModalDecisionTree(min_samples_leaf=4), X, y)
-    fit!(mach, rows=train)
-    fitted_params(mach).tree
+    model = ModalDecisionTree(; relations = :IA7, features = [minimum, maximum])   
+    mach = machine(model, X_train, y_train) |> fit!
 end
 
-report(mach).printmodel(3)
+report(learned_dt_tree).printmodel();
 
+# cell 7 - Model inspection & rule study
+_, mtree = report(mach).sprinkle(X_test, y_test)
+sole_dt = ModalDecisionTrees.translate(mtree)
 
-# cell 8 - Convert to Sole model
-sole_dt = solemodel(learned_dt_tree)
-
-# cell 9 - Model inspection & rule study
-# Make test instances flow into the model, so that test metrics can, then, be computed.
-apply!(sole_dt, X_test, y_test);
-# Print Sole model
 printmodel(sole_dt; show_metrics = true);
 
-# cell 10 - Extract rules that are at least as good as a random baseline model
+# cell 8 - Extract rules that are at least as good as a random baseline model
 interesting_rules = listrules(sole_dt, min_lift = 1.0, min_ninstances = 0);
 printmodel.(interesting_rules; show_metrics = true);
 
-# cell 11 - Simplify rules while extracting and prettify result
+# cell 9 - Simplify rules while extracting and prettify result
 interesting_rules = listrules(sole_dt, min_lift = 1.0, min_ninstances = 0, normalize = true);
 printmodel.(interesting_rules; show_metrics = true, syntaxstring_kwargs = (; threshold_digits = 2));
 
-# cell 12 - Directly access rule metrics
+# cell 10 - Directly access rule metrics
 readmetrics.(listrules(sole_dt; min_lift=1.0, min_ninstances = 0))
+
+
+###############################################################################
+
+
 
 # cell 13 - Show rules with an additional metric (syntax height of the rule's antecedent)
 printmodel.(sort(interesting_rules, by = readmetrics); show_metrics = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))));
