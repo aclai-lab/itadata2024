@@ -7,7 +7,7 @@ using DataFrames, JLD2, CSV
 using StatsBase, Statistics
 using Catch22, Audio911
 
-# cell 2
+# cell 2 - Open .jld2 file
 ds_path = "/home/paso/Documents/Aclai/audio-rules2024/datasets/respiratory_Healthy_Pneumonia"
 
 d = jldopen(string(ds_path, ".jld2"))
@@ -15,7 +15,7 @@ x, y = d["dataframe_validated"]
 @assert x isa DataFrame
 close(d)
 
-# cell 3
+# cell 3 - Audio features extraction function
 nan_replacer!(x::AbstractArray{Float64}) = replace!(x, NaN => 0.0)
 
 function afe(x::AbstractVector{Float64})
@@ -134,7 +134,7 @@ for i in 1:nrow(x)
     push!(X, collect(eachcol(afe(x[i, :audio]))))
 end
 
-# cell 5
+# cell 5 - Data compression for propositional analysis
 catch9 = [
     maximum,
     minimum,
@@ -154,7 +154,7 @@ for i in eachcol(X)
 end
 Xc = DataFrame(t[:, 2:end], names(X));
 
-yc = CategoricalArray(y);
+yc = CategoricalArray{String,1,UInt32}(y);
 
 # cell 6
 train_ratio = 0.8
@@ -166,7 +166,7 @@ X_test, y_test = Xc[test, :], yc[test]
 println("Training set size: ", size(X_train), " - ", length(y_train))
 println("Test set size: ", size(X_test), " - ", length(y_test))
 
-# cell 7
+# cell 7 - Train a model
 learned_dt_tree = begin
     Tree = MLJ.@load DecisionTreeClassifier pkg=DecisionTree
     model = Tree(max_depth=-1, )
@@ -175,126 +175,28 @@ learned_dt_tree = begin
     fitted_params(mach).tree
 end
 
-# cell 8
+# cell 8 - Convert to Sole model
 sole_dt = solemodel(learned_dt_tree)
 
-#cell 9
+# cell 9 - Model inspection & rule study
 # Make test instances flow into the model, so that test metrics can, then, be computed.
 apply!(sole_dt, X_test, y_test);
 # Print Sole model
-printmodel(sole_dt; show_metrics = false);
+printmodel(sole_dt; show_metrics = true);
 
-# cell 10
+# cell 10 - Extract rules that are at least as good as a random baseline model
 interesting_rules = listrules(sole_dt, min_lift = 1.0, min_ninstances = 0);
+printmodel.(interesting_rules; show_metrics = true);
 
+# cell 11 - Simplify rules while extracting and prettify result
 interesting_rules = listrules(sole_dt, min_lift = 1.0, min_ninstances = 0, normalize = true);
+printmodel.(interesting_rules; show_metrics = true, syntaxstring_kwargs = (; threshold_digits = 2));
 
+# cell 12 - Directly access rule metrics
+readmetrics.(listrules(sole_dt; min_lift=1.0, min_ninstances = 0))
 
-# ------------------------------------------------------------------- #
-# X, y = @load_iris
-# X = DataFrame(X)
+# cell 13 - Show rules with an additional metric (syntax height of the rule's antecedent)
+printmodel.(sort(interesting_rules, by = readmetrics); show_metrics = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))));
 
-# train, test = partition(eachindex(y), 0.8, shuffle=true);
-# X_train, y_train = X[train, :], y[train];
-# X_test, y_test = X[test, :], y[test];
-
-# # Train a model
-# learned_dt_tree = begin
-#   Tree = MLJ.@load DecisionTreeClassifier pkg=DecisionTree
-#   model = Tree(max_depth=-1, )
-#   mach = machine(model, X_train, y_train)
-#   fit!(mach)
-#   fitted_params(mach).tree
-# end
-
-# using SoleDecisionTreeInterface
-
-# # Convert to Sole model
-# sole_dt = solemodel(learned_dt_tree)
-
-# ------------------------------------------------------------------- #
-
-# modal symbolic learning course
-
-# ci potrebbe essere il codice
-
-# sperimenta il moving window quando arriva il codice di modal decision trees
-
-function load_jld2(dataset_name::String)
-    # Note: Requires Catch22
-    d = jldopen(string(dataset_name, ".jld2"))
-    df, Y = d["dataframe_validated"]
-    @assert df isa DataFrame
-    close(d)
-    return df, Y
-end
-
-catch9 = [
-    maximum,
-    minimum,
-    StatsBase.mean,
-    median,
-    std,
-    Catch22.SB_BinaryStats_mean_longstretch1,
-    Catch22.SB_BinaryStats_diff_longstretch0,
-    Catch22.SB_MotifThree_quantile_hh,
-    Catch22.SB_TransitionMatrix_3ac_sumdiagcov,
-]
-
-ds_path = "/home/paso/Documents/Aclai/ItaData2024/jld2_files/respiratory/respiratory_Healthy_Pneumonia"
-Xd, yd = load_jld2(ds_path)
-# reduce
-Xm = Xd[:, 1:13]
-y = CategoricalArray(yd)
-
-train, test = partition(eachindex(y), 0.8, shuffle=true);
-
-t = zeros(size(Xm, 1))
-for i in eachcol(Xm)
-    feature = map(x -> catch9[4](x...), eachrow(i))
-    global t = hcat(t, feature)
-end
-X = DataFrame(t[:, 2:end], names(Xm))
-
-X_train, y_train = X[train, :], y[train];
-X_test, y_test = X[test, :], y[test];
-
-# # Train a model
-# learned_dt_tree = begin
-#   Tree = MLJ.@load DecisionTreeClassifier pkg=DecisionTree
-#   model = Tree(max_depth=-1, )
-#   mach = machine(model, X_train, y_train)
-#   fit!(mach)
-#   fitted_params(mach).tree
-# end
-
-# Train a model
-learned_dt_tree = begin
-  Tree = MLJ.@load DecisionTreeClassifier pkg=DecisionTree
-  model = Tree(max_depth=-1, )
-  mach = machine(model, X_train, y_train)
-  fit!(mach)
-  fitted_params(mach).tree
-end
-
-# using SoleDecisionTreeInterface
-
-# # Convert to Sole model
-# sole_dt = solemodel(learned_dt_tree)
-
-# ------------------------------------------------------------------- #
-# rules
-a3 = x -> x < 5.48e-6
-a13 = x -> x < 2.553e-5
-a1 = x -> x < 2.133e-6
-a10 = x -> x < 1.481e-8
-
-# predict
-yp = hcat(y_test, fill("", length(y_test)))
-for i in 1:nrow(X_test)
-    if a3(X_test[i, :a3]) && a13(X_test[i, :a13]) && a1(X_test[i, :a1]) && a10(X_test[i, :a10])
-        yp[i, 2] = "Healthy"
-    else
-        yp[i, 2] = "Pneumonia"
-    end
-end
+# cell 14 - Pretty table of rules and their metrics
+metricstable(interesting_rules; metrics_kwargs = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))))
