@@ -1,3 +1,6 @@
+using Pkg
+Pkg.activate(joinpath(@__DIR__))
+
 # cell 1
 using MLJ, Sole
 using MLJDecisionTreeInterface
@@ -8,9 +11,9 @@ using StatsBase, Statistics
 using Catch22, Audio911
 
 # cell 2 - Open .jld2 file
-ds_path = "/home/paso/Documents/Aclai/audio-rules2024/datasets/respiratory_Healthy_Pneumonia"
+ds_path = "/datasets/respiratory_Healthy_Pneumonia"
 
-d = jldopen(string(ds_path, ".jld2"))
+d = jldopen(string((@__DIR__), ds_path, ".jld2"))
 x, y = d["dataframe_validated"]
 @assert x isa DataFrame
 close(d)
@@ -154,12 +157,12 @@ for i in eachcol(X)
 end
 Xc = DataFrame(t[:, 2:end], names(X));
 
-yc = CategoricalArray{String,1,UInt32}(y);
+yc = CategoricalArray(y);
 
 # cell 6
 train_ratio = 0.8
 
-train, test = partition(eachindex(y), train_ratio, shuffle=true)
+train, test = partition(eachindex(yc), train_ratio, shuffle=true)
 X_train, y_train = Xc[train, :], yc[train]
 X_test, y_test = Xc[test, :], yc[test]
 
