@@ -1,5 +1,6 @@
 using Pkg
 Pkg.activate(joinpath(@__DIR__))
+using Revise
 
 # cell 1
 using MLJ, ModalDecisionTrees
@@ -145,6 +146,7 @@ yc = CategoricalArray(y);
 # cell 5 - Split dataset
 train_ratio = 0.8
 train, test = partition(eachindex(yc), train_ratio, shuffle=true)
+# train, test = partition(eachindex(yc), train_ratio, shuffle=false) ### Debug
 X_train, y_train = X[train, :], yc[train]
 X_test, y_test = X[test, :], yc[test]
 
@@ -152,13 +154,17 @@ println("Training set size: ", size(X_train), " - ", length(y_train))
 println("Test set size: ", size(X_test), " - ", length(y_test))
 
 # cell 6 - Train a model
-
 learned_dt_tree = begin
     model = ModalDecisionTree(; relations = :IA7, features = [minimum, maximum])   
     mach = machine(model, X_train, y_train) |> fit!
 end
 
+# BROKEN!
 report(learned_dt_tree).printmodel();
+# BROKEN!
+# secondo me è perchè nell'interfaccia MLJ prima crea l'albero, che magari è multimodale,
+# mentre io verifico che sia unimodale solo quando lancia la funzione translate e
+# trasla da ModalDecisionTree a solemodel_full e solemodel
 
 # cell 7 - Model inspection & rule study
 _, mtree = report(mach).sprinkle(X_test, y_test)
@@ -177,13 +183,8 @@ printmodel.(interesting_rules; show_metrics = true, syntaxstring_kwargs = (; thr
 # cell 10 - Directly access rule metrics
 readmetrics.(listrules(sole_dt; min_lift=1.0, min_ninstances = 0))
 
-
-###############################################################################
-
-
-
-# cell 13 - Show rules with an additional metric (syntax height of the rule's antecedent)
+# cell 11 - Show rules with an additional metric (syntax height of the rule's antecedent)
 printmodel.(sort(interesting_rules, by = readmetrics); show_metrics = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))));
 
-# cell 14 - Pretty table of rules and their metrics
-metricstable(interesting_rules; metrics_kwargs = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))))
+# cell 12 - Pretty table of rules and their metrics
+s1 = metricstable(interesting_rules; metrics_kwargs = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))))
