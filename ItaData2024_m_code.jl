@@ -55,13 +55,13 @@ function afe(x::AbstractVector{Float64}; get_only_melfreq=false)
     # --------------------------------- functions -------------------------------- #
     # audio module
     audio = load_audio(
-        file=x, 
-        sr=sr, 
+        file=x,
+        sr=sr,
         norm=norm,
     );
 
     stftspec = get_stft(
-        audio=audio, 
+        audio=audio,
         stft_length=stft_length,
         win_type=win_type,
         win_length=win_length,
@@ -84,7 +84,7 @@ function afe(x::AbstractVector{Float64}; get_only_melfreq=false)
 
     # mel spectrogram module
     melspec =  get_melspec(
-        stft=stftspec, 
+        stft=stftspec,
         fbank=melfb,
         db_scale=db_scale
     );
@@ -135,12 +135,12 @@ end
 # cell 4 - Compute audio features dataframes and labels
 color_code = Dict(:red => 31, :green => 32, :yellow => 33, :blue => 34, :magenta => 35, :cyan => 36)
 freq = round.(Int, afe(x[1, :audio]; get_only_melfreq=true))
-subfeats = [
+variable_names = [
     ["\e[$(color_code[:yellow])mmel$i=$(freq[i])Hz\e[0m" for i in 1:26]...,
     ["\e[$(color_code[:red])mmfcc$i\e[0m" for i in 1:13]...,
-    "\e[$(color_code[:green])mf0\e[0m", "\e[$(color_code[:cyan])mcntrd\e[0m", "\e[$(color_code[:cyan])mcrest\e[0m", 
-    "\e[$(color_code[:cyan])mentrp\e[0m", "\e[$(color_code[:cyan])mflatn\e[0m", "\e[$(color_code[:cyan])mflux\e[0m", 
-    "\e[$(color_code[:cyan])mkurts\e[0m", "\e[$(color_code[:cyan])mrllff\e[0m", "\e[$(color_code[:cyan])mskwns\e[0m", 
+    "\e[$(color_code[:green])mf0\e[0m", "\e[$(color_code[:cyan])mcntrd\e[0m", "\e[$(color_code[:cyan])mcrest\e[0m",
+    "\e[$(color_code[:cyan])mentrp\e[0m", "\e[$(color_code[:cyan])mflatn\e[0m", "\e[$(color_code[:cyan])mflux\e[0m",
+    "\e[$(color_code[:cyan])mkurts\e[0m", "\e[$(color_code[:cyan])mrllff\e[0m", "\e[$(color_code[:cyan])mskwns\e[0m",
     "\e[$(color_code[:cyan])mdecrs\e[0m", "\e[$(color_code[:cyan])mslope\e[0m", "\e[$(color_code[:cyan])msprd\e[0m"
 ]
 
@@ -148,7 +148,7 @@ features = [minimum, maximum]
 
 # feature_dict = Dict(i => "[$(col)-> $(func)]" for (i, (func, col)) in enumerate(Iterators.product(colnames, features)))
 
-X = DataFrame([name => Vector{Float64}[] for name in subfeats])
+X = DataFrame([name => Vector{Float64}[] for name in variable_names])
 
 for i in 1:nrow(x)
     push!(X, collect(eachcol(afe(x[i, :audio]))))
@@ -168,7 +168,7 @@ println("Test set size: ", size(X_test), " - ", length(y_test))
 
 # cell 6 - Train a model
 learned_dt_tree = begin
-    model = ModalDecisionTree(; relations = :IA7, features = features)   
+    model = ModalDecisionTree(; relations = :IA7, features = features)
     mach = machine(model, X_train, y_train) |> fit!
 end
 
@@ -183,27 +183,27 @@ end
 _, mtree = report(mach).sprinkle(X_test, y_test)
 sole_dt = ModalDecisionTrees.translate(mtree)
 
-printmodel(sole_dt; show_metrics = true, subfeats=subfeats);
+printmodel(sole_dt; show_metrics = true, variable_names=variable_names);
 
 # cell 8 - Extract rules that are at least as good as a random baseline model
 interesting_rules = listrules(sole_dt, min_lift = 1.0, min_ninstances = 0);
-printmodel.(interesting_rules; show_metrics = true, subfeats=subfeats);
+printmodel.(interesting_rules; show_metrics = true, variable_names=variable_names);
 
 # cell 9 - Simplify rules while extracting and prettify result
 interesting_rules = listrules(sole_dt, min_lift = 1.0, min_ninstances = 0, normalize = true);
-printmodel.(interesting_rules; show_metrics = true, syntaxstring_kwargs = (; threshold_digits = 2), subfeats=subfeats);
+printmodel.(interesting_rules; show_metrics = true, syntaxstring_kwargs = (; threshold_digits = 2), variable_names=variable_names);
 
 # cell 10 - Directly access rule metrics
 readmetrics.(listrules(sole_dt; min_lift=1.0, min_ninstances = 0))
 
 # cell 11 - Show rules with an additional metric (syntax height of the rule's antecedent)
-printmodel.(sort(interesting_rules, by = readmetrics); show_metrics = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))), subfeats=subfeats);
+printmodel.(sort(interesting_rules, by = readmetrics); show_metrics = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))), variable_names=variable_names);
 
 # cell 12 - Pretty table of rules and their metrics
-subfeats = [
+variable_names = [
     ["mel$i" for i in 1:26]...,
     ["mfcc$i" for i in 1:13]...,
     "f0", "cntrd", "crest", "entrp", "flatn", "flux", "kurts", "rllff", "skwns", "decrs", "slope", "sprd"
 ]
 
-s1 = metricstable(interesting_rules; subfeats=subfeats, metrics_kwargs = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))))
+s1 = metricstable(interesting_rules; variable_names=variable_names, metrics_kwargs = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))))
