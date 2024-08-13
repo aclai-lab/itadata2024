@@ -132,7 +132,7 @@ function afe(x::AbstractVector{Float64}; get_only_melfreq=false)
     return x_features
 end
 
-# cell 4 - Compute audio features dataframes and labels
+# cell 4 - Compute DataFrame of features
 color_code = Dict(:red => 31, :green => 32, :yellow => 33, :blue => 34, :magenta => 35, :cyan => 36)
 freq = round.(Int, afe(x[1, :audio]; get_only_melfreq=true))
 variable_names = [
@@ -144,11 +144,14 @@ variable_names = [
     "\e[$(color_code[:cyan])mdecrs\e[0m", "\e[$(color_code[:cyan])mslope\e[0m", "\e[$(color_code[:cyan])msprd\e[0m"
 ]
 
+col_names = [
+    ["mel$i=$(freq[i])Hz" for i in 1:26]...,
+    ["mfcc$i" for i in 1:13]...,
+    "f0", "cntrd", "crest", "entrp", "flatn", "flux", "kurts", "rllff", "skwns", "decrs", "slope", "sprd"
+]
+X = DataFrame([name => Vector{Float64}[] for name in col_names])
+
 features = [minimum, maximum]
-
-# feature_dict = Dict(i => "[$(col)-> $(func)]" for (i, (func, col)) in enumerate(Iterators.product(colnames, features)))
-
-X = DataFrame([name => Vector{Float64}[] for name in variable_names])
 
 for i in 1:nrow(x)
     push!(X, collect(eachcol(afe(x[i, :audio]))))
@@ -156,7 +159,7 @@ end
 
 yc = CategoricalArray(y);
 
-# cell 5 - Split dataset
+# cell 5 - Data compression for propositional analysis
 train_ratio = 0.8
 train, test = partition(eachindex(yc), train_ratio, shuffle=true)
 # train, test = partition(eachindex(yc), train_ratio, shuffle=false) ### Debug
@@ -172,38 +175,27 @@ learned_dt_tree = begin
     mach = machine(model, X_train, y_train) |> fit!
 end
 
-# BROKEN!
-# report(learned_dt_tree).printmodel();
-# BROKEN!
-# secondo me è perchè nell'interfaccia MLJ prima crea l'albero, che magari è multimodale,
-# mentre io verifico che sia unimodale solo quando lancia la funzione translate e
-# trasla da ModalDecisionTree a solemodel_full e solemodel
+report(learned_dt_tree).printmodel(variable_names_map=variable_names);
 
 # cell 7 - Model inspection & rule study
 _, mtree = report(mach).sprinkle(X_test, y_test)
 sole_dt = ModalDecisionTrees.translate(mtree)
 
-printmodel(sole_dt; show_metrics = true, variable_names=variable_names);
+printmodel(sole_dt; show_metrics = true, variable_names_map=variable_names);
 
 # cell 8 - Extract rules that are at least as good as a random baseline model
 interesting_rules = listrules(sole_dt, min_lift = 1.0, min_ninstances = 0);
-printmodel.(interesting_rules; show_metrics = true, variable_names=variable_names);
+printmodel.(interesting_rules; show_metrics = true, variable_names_map=variable_names);
 
 # cell 9 - Simplify rules while extracting and prettify result
 interesting_rules = listrules(sole_dt, min_lift = 1.0, min_ninstances = 0, normalize = true);
-printmodel.(interesting_rules; show_metrics = true, syntaxstring_kwargs = (; threshold_digits = 2), variable_names=variable_names);
+printmodel.(interesting_rules; show_metrics = true, syntaxstring_kwargs = (; threshold_digits = 2), variable_names_map=variable_names);
 
 # cell 10 - Directly access rule metrics
 readmetrics.(listrules(sole_dt; min_lift=1.0, min_ninstances = 0))
 
 # cell 11 - Show rules with an additional metric (syntax height of the rule's antecedent)
-printmodel.(sort(interesting_rules, by = readmetrics); show_metrics = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))), variable_names=variable_names);
+printmodel.(sort(interesting_rules, by = readmetrics); show_metrics = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))), variable_names_map=variable_names);
 
 # cell 12 - Pretty table of rules and their metrics
-variable_names = [
-    ["mel$i" for i in 1:26]...,
-    ["mfcc$i" for i in 1:13]...,
-    "f0", "cntrd", "crest", "entrp", "flatn", "flux", "kurts", "rllff", "skwns", "decrs", "slope", "sprd"
-]
-
-s1 = metricstable(interesting_rules; variable_names=variable_names, metrics_kwargs = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))))
+metricstable(interesting_rules; variable_names_map=col_names, metrics_kwargs = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))))

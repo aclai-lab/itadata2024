@@ -21,7 +21,7 @@ close(d)
 # cell 3 - Audio features extraction function
 nan_replacer!(x::AbstractArray{Float64}) = replace!(x, NaN => 0.0)
 
-function afe(x::AbstractVector{Float64})
+function afe(x::AbstractVector{Float64}; get_only_melfreq=false)
     # -------------------------------- parameters -------------------------------- #
     # audio module
     sr = 8000
@@ -51,13 +51,13 @@ function afe(x::AbstractVector{Float64})
     # --------------------------------- functions -------------------------------- #
     # audio module
     audio = load_audio(
-        file=x, 
-        sr=sr, 
+        file=x,
+        sr=sr,
         norm=norm,
     );
 
     stftspec = get_stft(
-        audio=audio, 
+        audio=audio,
         stft_length=stft_length,
         win_type=win_type,
         win_length=win_length,
@@ -74,9 +74,13 @@ function afe(x::AbstractVector{Float64})
         freq_range=freq_range
     );
 
+    if get_only_melfreq
+        return melfb.freq
+    end
+
     # mel spectrogram module
     melspec =  get_melspec(
-        stft=stftspec, 
+        stft=stftspec,
         fbank=melfb,
         db_scale=db_scale
     );
@@ -124,14 +128,17 @@ function afe(x::AbstractVector{Float64})
     return x_features
 end
 
-# cell 4
-colnames = [
-    ["mel$i" for i in 1:26]...,
+# cell 4 - Compute DataFrame of features
+freq = round.(Int, afe(x[1, :audio]; get_only_melfreq=true))
+
+col_names = [
+    ["mel$i=$(freq[i])Hz" for i in 1:26]...,
     ["mfcc$i" for i in 1:13]...,
     "f0", "cntrd", "crest", "entrp", "flatn", "flux", "kurts", "rllff", "skwns", "decrs", "slope", "sprd"
 ]
+X = DataFrame([name => Vector{Float64}[] for name in col_names])
 
-X = DataFrame([name => Vector{Float64}[] for name in colnames])
+features = [minimum, maximum]
 
 for i in 1:nrow(x)
     push!(X, collect(eachcol(afe(x[i, :audio]))))
@@ -159,17 +166,17 @@ Xc = DataFrame(t[:, 2:end], names(X));
 
 yc = CategoricalArray(y);
 
-# cell 6
 train_ratio = 0.8
 
 train, test = partition(eachindex(yc), train_ratio, shuffle=true)
+# train, test = partition(eachindex(yc), train_ratio, shuffle=false) ### Debug
 X_train, y_train = Xc[train, :], yc[train]
 X_test, y_test = Xc[test, :], yc[test]
 
 println("Training set size: ", size(X_train), " - ", length(y_train))
 println("Test set size: ", size(X_test), " - ", length(y_test))
 
-# cell 7 - Train a model
+# cell 6 - Train a model
 learned_dt_tree = begin
     Tree = MLJ.@load DecisionTreeClassifier pkg=DecisionTree
     model = Tree(max_depth=-1, )
@@ -178,28 +185,26 @@ learned_dt_tree = begin
     fitted_params(mach).tree
 end
 
-# cell 8 - Convert to Sole model
+# cell 7 - Model inspection & rule study
 sole_dt = solemodel(learned_dt_tree)
-
-# cell 9 - Model inspection & rule study
 # Make test instances flow into the model, so that test metrics can, then, be computed.
 apply!(sole_dt, X_test, y_test);
 # Print Sole model
 printmodel(sole_dt; show_metrics = true);
 
-# cell 10 - Extract rules that are at least as good as a random baseline model
+# cell 8 - Extract rules that are at least as good as a random baseline model
 interesting_rules = listrules(sole_dt, min_lift = 1.0, min_ninstances = 0);
 printmodel.(interesting_rules; show_metrics = true);
 
-# cell 11 - Simplify rules while extracting and prettify result
+# cell 9 - Simplify rules while extracting and prettify result
 interesting_rules = listrules(sole_dt, min_lift = 1.0, min_ninstances = 0, normalize = true);
 printmodel.(interesting_rules; show_metrics = true, syntaxstring_kwargs = (; threshold_digits = 2));
 
-# cell 12 - Directly access rule metrics
+# cell 10 - Directly access rule metrics
 readmetrics.(listrules(sole_dt; min_lift=1.0, min_ninstances = 0))
 
-# cell 13 - Show rules with an additional metric (syntax height of the rule's antecedent)
+# cell 11 - Show rules with an additional metric (syntax height of the rule's antecedent)
 printmodel.(sort(interesting_rules, by = readmetrics); show_metrics = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))));
 
-# cell 14 - Pretty table of rules and their metrics
+# cell 12 - Pretty table of rules and their metrics
 metricstable(interesting_rules; metrics_kwargs = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))))
