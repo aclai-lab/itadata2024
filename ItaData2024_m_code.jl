@@ -198,4 +198,4 @@ readmetrics.(listrules(sole_dt; min_lift=1.0, min_ninstances = 0))
 printmodel.(sort(interesting_rules, by = readmetrics); show_metrics = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))), variable_names_map=variable_names);
 
 # cell 12 - Pretty table of rules and their metrics
-metricstable(interesting_rules; variable_names_map=col_names, metrics_kwargs = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))))
+metricstable(interesting_rules; variable_names_map=variable_names, metrics_kwargs = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))))

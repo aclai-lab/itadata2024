@@ -129,13 +129,23 @@ function afe(x::AbstractVector{Float64}; get_only_melfreq=false)
 end
 
 # cell 4 - Compute DataFrame of features
+color_code = Dict(:red => 31, :green => 32, :yellow => 33, :blue => 34, :magenta => 35, :cyan => 36)
 freq = round.(Int, afe(x[1, :audio]; get_only_melfreq=true))
+variable_names = [
+    ["\e[$(color_code[:yellow])mmel$i=$(freq[i])Hz\e[0m" for i in 1:26]...,
+    ["\e[$(color_code[:red])mmfcc$i\e[0m" for i in 1:13]...,
+    "\e[$(color_code[:green])mf0\e[0m", "\e[$(color_code[:cyan])mcntrd\e[0m", "\e[$(color_code[:cyan])mcrest\e[0m",
+    "\e[$(color_code[:cyan])mentrp\e[0m", "\e[$(color_code[:cyan])mflatn\e[0m", "\e[$(color_code[:cyan])mflux\e[0m",
+    "\e[$(color_code[:cyan])mkurts\e[0m", "\e[$(color_code[:cyan])mrllff\e[0m", "\e[$(color_code[:cyan])mskwns\e[0m",
+    "\e[$(color_code[:cyan])mdecrs\e[0m", "\e[$(color_code[:cyan])mslope\e[0m", "\e[$(color_code[:cyan])msprd\e[0m"
+]
 
 col_names = [
     ["mel$i=$(freq[i])Hz" for i in 1:26]...,
     ["mfcc$i" for i in 1:13]...,
     "f0", "cntrd", "crest", "entrp", "flatn", "flux", "kurts", "rllff", "skwns", "decrs", "slope", "sprd"
 ]
+variable_idx = Dict(name => index for (index, name) in enumerate(col_names))
 X = DataFrame([name => Vector{Float64}[] for name in col_names])
 
 features = [minimum, maximum]
@@ -190,21 +200,21 @@ sole_dt = solemodel(learned_dt_tree)
 # Make test instances flow into the model, so that test metrics can, then, be computed.
 apply!(sole_dt, X_test, y_test);
 # Print Sole model
-printmodel(sole_dt; show_metrics = true);
+printmodel(sole_dt; show_metrics = true, variable_names_map = variable_names, variable_idx = variable_idx);
 
 # cell 8 - Extract rules that are at least as good as a random baseline model
 interesting_rules = listrules(sole_dt, min_lift = 1.0, min_ninstances = 0);
-printmodel.(interesting_rules; show_metrics = true);
+printmodel.(interesting_rules; show_metrics = true, variable_names_map = variable_names, variable_idx = variable_idx);
 
 # cell 9 - Simplify rules while extracting and prettify result
 interesting_rules = listrules(sole_dt, min_lift = 1.0, min_ninstances = 0, normalize = true);
-printmodel.(interesting_rules; show_metrics = true, syntaxstring_kwargs = (; threshold_digits = 2));
+printmodel.(interesting_rules; show_metrics = true, syntaxstring_kwargs = (; threshold_digits = 2), variable_names_map = variable_names, variable_idx = variable_idx);
 
 # cell 10 - Directly access rule metrics
 readmetrics.(listrules(sole_dt; min_lift=1.0, min_ninstances = 0))
 
 # cell 11 - Show rules with an additional metric (syntax height of the rule's antecedent)
-printmodel.(sort(interesting_rules, by = readmetrics); show_metrics = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))));
+printmodel.(sort(interesting_rules, by = readmetrics); show_metrics = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))), variable_names_map = variable_names, variable_idx = variable_idx);
 
 # cell 12 - Pretty table of rules and their metrics
-metricstable(interesting_rules; metrics_kwargs = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))))
+metricstable(interesting_rules; variable_names_map = variable_names, variable_idx = variable_idx, metrics_kwargs = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))))
