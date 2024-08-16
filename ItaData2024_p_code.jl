@@ -131,6 +131,7 @@ end
 # cell 4 - Compute DataFrame of features
 color_code = Dict(:red => 31, :green => 32, :yellow => 33, :blue => 34, :magenta => 35, :cyan => 36)
 freq = round.(Int, afe(x[1, :audio]; get_only_melfreq=true))
+r_select = r"\e\[\d+m(.*?)\e\[0m"
 variable_names = [
     ["\e[$(color_code[:yellow])mmel$i=$(freq[i])Hz\e[0m" for i in 1:26]...,
     ["\e[$(color_code[:red])mmfcc$i\e[0m" for i in 1:13]...,
@@ -140,15 +141,7 @@ variable_names = [
     "\e[$(color_code[:cyan])mdecrs\e[0m", "\e[$(color_code[:cyan])mslope\e[0m", "\e[$(color_code[:cyan])msprd\e[0m"
 ]
 
-col_names = [
-    ["mel$i=$(freq[i])Hz" for i in 1:26]...,
-    ["mfcc$i" for i in 1:13]...,
-    "f0", "cntrd", "crest", "entrp", "flatn", "flux", "kurts", "rllff", "skwns", "decrs", "slope", "sprd"
-]
-variable_idx = Dict(name => index for (index, name) in enumerate(col_names))
-X = DataFrame([name => Vector{Float64}[] for name in col_names])
-
-features = [minimum, maximum]
+X = DataFrame([name => Vector{Float64}[] for name in [match(r_select, v)[1] for v in variable_names]])
 
 for i in 1:nrow(x)
     push!(X, collect(eachcol(afe(x[i, :audio]))))
@@ -200,21 +193,21 @@ sole_dt = solemodel(learned_dt_tree)
 # Make test instances flow into the model, so that test metrics can, then, be computed.
 apply!(sole_dt, X_test, y_test);
 # Print Sole model
-printmodel(sole_dt; show_metrics = true, variable_names_map = variable_names, variable_idx = variable_idx);
+printmodel(sole_dt; show_metrics = true, variable_names_map = variable_names);
 
 # cell 8 - Extract rules that are at least as good as a random baseline model
 interesting_rules = listrules(sole_dt, min_lift = 1.0, min_ninstances = 0);
-printmodel.(interesting_rules; show_metrics = true, variable_names_map = variable_names, variable_idx = variable_idx);
+printmodel.(interesting_rules; show_metrics = true, variable_names_map = variable_names);
 
 # cell 9 - Simplify rules while extracting and prettify result
 interesting_rules = listrules(sole_dt, min_lift = 1.0, min_ninstances = 0, normalize = true);
-printmodel.(interesting_rules; show_metrics = true, syntaxstring_kwargs = (; threshold_digits = 2), variable_names_map = variable_names, variable_idx = variable_idx);
+printmodel.(interesting_rules; show_metrics = true, syntaxstring_kwargs = (; threshold_digits = 2), variable_names_map = variable_names);
 
 # cell 10 - Directly access rule metrics
 readmetrics.(listrules(sole_dt; min_lift=1.0, min_ninstances = 0))
 
 # cell 11 - Show rules with an additional metric (syntax height of the rule's antecedent)
-printmodel.(sort(interesting_rules, by = readmetrics); show_metrics = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))), variable_names_map = variable_names, variable_idx = variable_idx);
+printmodel.(sort(interesting_rules, by = readmetrics); show_metrics = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))), variable_names_map = variable_names);
 
 # cell 12 - Pretty table of rules and their metrics
-metricstable(interesting_rules; variable_names_map = variable_names, variable_idx = variable_idx, metrics_kwargs = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))))
+metricstable(interesting_rules; variable_names_map = variable_names, metrics_kwargs = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))))

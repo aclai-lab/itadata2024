@@ -135,6 +135,7 @@ end
 # cell 4 - Compute DataFrame of features
 color_code = Dict(:red => 31, :green => 32, :yellow => 33, :blue => 34, :magenta => 35, :cyan => 36)
 freq = round.(Int, afe(x[1, :audio]; get_only_melfreq=true))
+r_select = r"\e\[\d+m(.*?)\e\[0m"
 variable_names = [
     ["\e[$(color_code[:yellow])mmel$i=$(freq[i])Hz\e[0m" for i in 1:26]...,
     ["\e[$(color_code[:red])mmfcc$i\e[0m" for i in 1:13]...,
@@ -144,12 +145,7 @@ variable_names = [
     "\e[$(color_code[:cyan])mdecrs\e[0m", "\e[$(color_code[:cyan])mslope\e[0m", "\e[$(color_code[:cyan])msprd\e[0m"
 ]
 
-col_names = [
-    ["mel$i=$(freq[i])Hz" for i in 1:26]...,
-    ["mfcc$i" for i in 1:13]...,
-    "f0", "cntrd", "crest", "entrp", "flatn", "flux", "kurts", "rllff", "skwns", "decrs", "slope", "sprd"
-]
-X = DataFrame([name => Vector{Float64}[] for name in col_names])
+X = DataFrame([name => Vector{Float64}[] for name in [match(r_select, v)[1] for v in variable_names]])
 
 features = [minimum, maximum]
 
