@@ -19,7 +19,8 @@ x, y = d["dataframe_validated"]
 close(d)
 
 # cell 3 - Audio features extraction function
-nan_replacer!(x::AbstractArray{Float64}) = replace!(x, NaN => 0.0)
+nan_replacer!(x::AbstractArray{<:AbstractFloat}) = replace!(x, NaN => 0.0)
+nan_replacer!(x::Vector{Vector{Float64}}) = map!(v -> replace!(v, NaN => 0.0), x, x)
 
 function afe(x::AbstractVector{Float64}; get_only_melfreq=false)
     # -------------------------------- parameters -------------------------------- #
@@ -132,19 +133,18 @@ end
 color_code = Dict(:red => 31, :green => 32, :yellow => 33, :blue => 34, :magenta => 35, :cyan => 36)
 freq = round.(Int, afe(x[1, :audio]; get_only_melfreq=true))
 r_select = r"\e\[\d+m(.*?)\e\[0m"
-variable_names = [
-    ["\e[$(color_code[:yellow])mmel$i=$(freq[i])Hz\e[0m" for i in 1:26]...,
-    ["\e[$(color_code[:red])mmfcc$i\e[0m" for i in 1:13]...,
-    "\e[$(color_code[:green])mf0\e[0m", "\e[$(color_code[:cyan])mcntrd\e[0m", "\e[$(color_code[:cyan])mcrest\e[0m",
-    "\e[$(color_code[:cyan])mentrp\e[0m", "\e[$(color_code[:cyan])mflatn\e[0m", "\e[$(color_code[:cyan])mflux\e[0m",
-    "\e[$(color_code[:cyan])mkurts\e[0m", "\e[$(color_code[:cyan])mrllff\e[0m", "\e[$(color_code[:cyan])mskwns\e[0m",
-    "\e[$(color_code[:cyan])mdecrs\e[0m", "\e[$(color_code[:cyan])mslope\e[0m", "\e[$(color_code[:cyan])msprd\e[0m"
-]
 
-X = DataFrame([name => Vector{Float64}[] for name in [match(r_select, v)[1] for v in variable_names]])
-
-for i in 1:nrow(x)
-    push!(X, collect(eachcol(afe(x[i, :audio]))))
+catch9_f = ["max", "min", "mean", "med", "std", "bsm", "bsd", "qnt", "3ac"]
+variable_names = []
+for j in catch9_f
+    global variable_names = vcat(variable_names...,
+        ["\e[$(color_code[:yellow])mmel$i=$(freq[i])Hz->$j\e[0m" for i in 1:26]...,
+        ["\e[$(color_code[:red])mmfcc$i->$j\e[0m" for i in 1:13]...,
+        "\e[$(color_code[:green])mf0->$j\e[0m", "\e[$(color_code[:cyan])mcntrd->$j\e[0m", "\e[$(color_code[:cyan])mcrest->$j\e[0m",
+        "\e[$(color_code[:cyan])mentrp->$j\e[0m", "\e[$(color_code[:cyan])mflatn->$j\e[0m", "\e[$(color_code[:cyan])mflux->$j\e[0m",
+        "\e[$(color_code[:cyan])mkurts->$j\e[0m", "\e[$(color_code[:cyan])mrllff->$j\e[0m", "\e[$(color_code[:cyan])mskwns->$j\e[0m",
+        "\e[$(color_code[:cyan])mdecrs->$j\e[0m", "\e[$(color_code[:cyan])mslope->$j\e[0m", "\e[$(color_code[:cyan])msprd->$j\e[0m"
+    )
 end
 
 # cell 5 - Data compression for propositional analysis
@@ -160,12 +160,9 @@ catch9 = [
     Catch22.SB_TransitionMatrix_3ac_sumdiagcov,
 ]
 
-t = zeros(size(X, 1))
-for i in eachcol(X)
-    feature = map(x -> catch9[4](x...), eachrow(i))
-    global t = hcat(t, feature)
-end
-Xc = DataFrame(t[:, 2:end], names(X));
+X = DataFrame([name => Float64[] for name in [match(r_select, v)[1] for v in variable_names]])
+audio_feats = [afe(row[:audio]) for row in eachrow(x)]
+push!(X, nan_replacer!(vcat([vcat([map(func, eachcol(row)) for func in catch9]...) for row in audio_feats]))...)
 
 yc = CategoricalArray(y);
 
@@ -173,8 +170,8 @@ train_ratio = 0.8
 
 train, test = partition(eachindex(yc), train_ratio, shuffle=true)
 # train, test = partition(eachindex(yc), train_ratio, shuffle=false) ### Debug
-X_train, y_train = Xc[train, :], yc[train]
-X_test, y_test = Xc[test, :], yc[test]
+X_train, y_train = X[train, :], yc[train]
+X_test, y_test = X[test, :], yc[test]
 
 println("Training set size: ", size(X_train), " - ", length(y_train))
 println("Test set size: ", size(X_test), " - ", length(y_test))
