@@ -1,5 +1,5 @@
 using Pkg
-Pkg.activate(joinpath(@__DIR__))
+Pkg.activate(".")
 using Revise
 
 # cell 1
@@ -20,8 +20,8 @@ x, y = d["dataframe_validated"]
 close(d)
 
 # out of memory guard
-# x = vcat(x[1:30, :], x[400:430, :])
-# y = vcat(y[1:30], y[400:430])
+x = vcat(x[1:10, :], x[400:410, :])
+y = vcat(y[1:10], y[400:410])
 
 # cell 3 - Audio features extraction function
 nan_replacer!(x::AbstractArray{Float64}) = replace!(x, NaN => 0.0)
@@ -33,10 +33,10 @@ function afe(x::AbstractVector{Float64}; get_only_melfreq=false)
     norm = true
     speech_detection = false
     # stft module
-    stft_length = 256
+    stft_length = 1024
     win_type = (:hann, :periodic)
-    win_length = 256
-    overlap_length = 128
+    win_length = 1024
+    overlap_length = 512
     stft_norm = :power                      # :power, :magnitude, :pow2mag
     # mel filterbank module
     nbands = 26
@@ -148,16 +148,53 @@ variable_names = [
 
 X = DataFrame([name => Vector{Float64}[] for name in [match(r_select, v)[1] for v in variable_names]])
 
+function mean_longstretch1(x) Catch22.SB_BinaryStats_mean_longstretch1((x)) end
+function diff_longstretch0(x) Catch22.SB_BinaryStats_diff_longstretch0((x)) end
+function quantile_hh(x) Catch22.SB_MotifThree_quantile_hh((x)) end
+function sumdiagcov(x) Catch22.SB_TransitionMatrix_3ac_sumdiagcov((x)) end
+
+nan_guard = [:std, :mean_longstretch1, :diff_longstretch0, :quantile_hh, :sumdiagcov]
+
+for f_name in nan_guard
+    println(f_name)
+    @eval (function $(Symbol(string(f_name)*"+"))(channel)
+        val = $(f_name)(channel)
+
+        if isnan(val)
+            SoleData.aggregator_bottom(SoleData.existential_aggregator(≥), eltype(channel))
+        else
+            eltype(channel)(val)
+        end
+    end)
+    @eval (function $(Symbol(string(f_name)*"-"))(channel)
+        val = $(f_name)(channel)
+
+        if isnan(val)
+            SoleData.aggregator_bottom(SoleData.existential_aggregator(≤), eltype(channel))
+        else
+            eltype(channel)(val)
+        end
+    end)
+end
+
+function get_patched_feature(f::Base.Callable, polarity::Symbol)
+    if f in [minimum, maximum, StatsBase.mean, median]
+        f
+    else
+        @eval $(Symbol(string(f)*string(polarity)))
+    end
+end
+
 features = [
     maximum,
     minimum,
     StatsBase.mean,
     median,
-    std,
-    Catch22.SB_BinaryStats_mean_longstretch1,
-    Catch22.SB_BinaryStats_diff_longstretch0,
-    Catch22.SB_MotifThree_quantile_hh,
-    Catch22.SB_TransitionMatrix_3ac_sumdiagcov,
+	(≥, get_patched_feature(std, :+)),                (≤, get_patched_feature(std, :-)),
+	(≥, get_patched_feature(mean_longstretch1, :+)),  (≤, get_patched_feature(mean_longstretch1, :-)),
+	(≥, get_patched_feature(diff_longstretch0, :+)),  (≤, get_patched_feature(diff_longstretch0, :-)),
+	(≥, get_patched_feature(quantile_hh, :+)),        (≤, get_patched_feature(quantile_hh, :-)),
+	(≥, get_patched_feature(sumdiagcov, :+)),         (≤, get_patched_feature(sumdiagcov, :-)),
 ]
 
 for i in 1:nrow(x)
