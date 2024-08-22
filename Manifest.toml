@@ -2,7 +2,7 @@
 
 julia_version = "1.9.4"
 manifest_format = "2.0"
-project_hash = "88467a12904d2d006795f75a437f2518a6647f85"
+project_hash = "d2f7812ff1d2b9008518a9eecd8607e78f890cc5"
 
 [[deps.ARFFFiles]]
 deps = ["CategoricalArrays", "Dates", "Parsers", "Tables"]
@@ -111,7 +111,7 @@ version = "0.1.0"
 
 [[deps.Audio911]]
 deps = ["DSP", "FFTW", "LinearAlgebra", "NaNStatistics", "Parameters", "PyCall", "Random", "Roots", "SpecialFunctions", "Statistics"]
-path = "~/.julia/dev/Audio911"
+path = "/home/gio/.julia/dev/Audio911"
 uuid = "5540a74f-91b5-427e-9d31-931d77bf3639"
 version = "0.1.0"
 
@@ -1332,6 +1332,12 @@ git-tree-sha1 = "949347156c25054de2db3b166c52ac4728cbad65"
 uuid = "90014a1f-27ba-587c-ab20-58faa44d9150"
 version = "0.11.31"
 
+[[deps.PackageExtensionCompat]]
+git-tree-sha1 = "fb28e33b8a95c4cee25ce296c817d89cc2e53518"
+uuid = "65ce6f38-6b18-4e1d-a461-8949797d7930"
+version = "1.0.2"
+weakdeps = ["Requires", "TOML"]
+
 [[deps.Pango_jll]]
 deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "FriBidi_jll", "Glib_jll", "HarfBuzz_jll", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "cb5a2ab6763464ae0f19c86c56c63d4a2b0f5bda"
@@ -1397,6 +1403,12 @@ version = "1.40.5"
     IJulia = "7073ff75-c697-5162-941a-fcdaad2a7d2a"
     ImageInTerminal = "d8c32880-2388-543b-8c61-d9f865259254"
     Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
+
+[[deps.Polyester]]
+deps = ["ArrayInterface", "BitTwiddlingConvenienceFunctions", "CPUSummary", "IfElse", "ManualMemory", "PolyesterWeave", "Static", "StaticArrayInterface", "StrideArraysCore", "ThreadingUtilities"]
+git-tree-sha1 = "6d38fea02d983051776a856b7df75b30cf9a3c1f"
+uuid = "f517fe37-dbe3-4b94-8317-1923a5111588"
+version = "0.7.16"
 
 [[deps.PolyesterWeave]]
 deps = ["BitTwiddlingConvenienceFunctions", "CPUSummary", "IfElse", "Static", "ThreadingUtilities"]
@@ -1716,7 +1728,7 @@ version = "0.9.4"
 
 [[deps.SoleModels]]
 deps = ["AbstractTrees", "BenchmarkTools", "CSV", "CategoricalArrays", "DataFrames", "DataStructures", "FillArrays", "FunctionWrappers", "Graphs", "HTTP", "Lazy", "LinearAlgebra", "Logging", "MLJModelInterface", "PrettyTables", "ProgressMeter", "Random", "Reexport", "Revise", "SoleBase", "SoleData", "SoleLogics", "StatsBase", "Suppressor", "Tables", "ThreadSafeDicts", "ZipFile"]
-path = "~/.julia/dev/SoleModels"
+path = "/home/gio/.julia/dev/SoleModels"
 uuid = "4249d9c7-3290-4ddd-961c-e1d3ec2467f8"
 version = "0.8.2"
 
@@ -1839,6 +1851,30 @@ weakdeps = ["ChainRulesCore", "InverseFunctions"]
     StatsFunsChainRulesCoreExt = "ChainRulesCore"
     StatsFunsInverseFunctionsExt = "InverseFunctions"
 
+[[deps.StrideArraysCore]]
+deps = ["ArrayInterface", "CloseOpenIntervals", "IfElse", "LayoutPointers", "LinearAlgebra", "ManualMemory", "SIMDTypes", "Static", "StaticArrayInterface", "ThreadingUtilities"]
+git-tree-sha1 = "f35f6ab602df8413a50c4a25ca14de821e8605fb"
+uuid = "7792a7ef-975c-4747-a70f-980b88e8d1da"
+version = "0.5.7"
+
+[[deps.Strided]]
+deps = ["LinearAlgebra", "StridedViews", "TupleTools"]
+git-tree-sha1 = "d85461cb47420b6dcecf51de8142fc60484dd0b3"
+uuid = "5e0ebb24-38b0-5f93-81fe-25c709ecae67"
+version = "2.1.1"
+
+[[deps.StridedViews]]
+deps = ["LinearAlgebra", "PackageExtensionCompat"]
+git-tree-sha1 = "2917996ce0fa6b8a3a85240a5e9ff930e2aeaa43"
+uuid = "4db3bf67-4bd7-4b4e-b153-31dc3fb37143"
+version = "0.3.1"
+
+    [deps.StridedViews.extensions]
+    StridedViewsCUDAExt = "CUDA"
+
+    [deps.StridedViews.weakdeps]
+    CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+
 [[deps.StringManipulation]]
 deps = ["PrecompileTools"]
 git-tree-sha1 = "a04cabe79c5f01f4d723cc6704070ada0b9d46d5"
@@ -1943,6 +1979,11 @@ version = "0.4.82"
     LazyArrays = "5078a376-72f3-5289-bfd5-ec5146d43c02"
     OnlineStatsBase = "925886fa-5bf2-5e8e-b522-a9147a512338"
     Referenceables = "42d2dcc6-99eb-4e98-b66c-637b7d73030e"
+
+[[deps.TupleTools]]
+git-tree-sha1 = "41d61b1c545b06279871ef1a4b5fcb2cac2191cd"
+uuid = "9d95972d-f1c8-5527-a6e0-b4b365fa01f6"
+version = "1.5.0"
 
 [[deps.URIs]]
 git-tree-sha1 = "67db6cc7b3821e19ebe75791a9dd19c9b1188f2b"
