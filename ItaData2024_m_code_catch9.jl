@@ -156,7 +156,6 @@ function sumdiagcov(x) Catch22.SB_TransitionMatrix_3ac_sumdiagcov((x)) end
 nan_guard = [:std, :mean_longstretch1, :diff_longstretch0, :quantile_hh, :sumdiagcov]
 
 for f_name in nan_guard
-    println(f_name)
     @eval (function $(Symbol(string(f_name)*"+"))(channel)
         val = $(f_name)(channel)
 
@@ -186,10 +185,10 @@ function get_patched_feature(f::Base.Callable, polarity::Symbol)
 end
 
 features = [
-    maximum,
-    minimum,
-    StatsBase.mean,
-    median,
+    (≥, get_patched_feature(maximum, :+)),            (≤, get_patched_feature(maximum, :-)),
+    (≥, get_patched_feature(minimum, :+)),            (≤, get_patched_feature(minimum, :-)),
+    (≥, get_patched_feature(StatsBase.mean, :+)),     (≤, get_patched_feature(StatsBase.mean, :-)),
+    (≥, get_patched_feature(median, :+)),             (≤, get_patched_feature(median, :-)),
 	(≥, get_patched_feature(std, :+)),                (≤, get_patched_feature(std, :-)),
 	(≥, get_patched_feature(mean_longstretch1, :+)),  (≤, get_patched_feature(mean_longstretch1, :-)),
 	(≥, get_patched_feature(diff_longstretch0, :+)),  (≤, get_patched_feature(diff_longstretch0, :-)),
