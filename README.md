@@ -1,10 +1,12 @@
 # Code example usage for "Symbolic Audio Classification via Modal Decision Tree Learning", ITADATA2024.
 
-This repo contains two Jupyter Notebooks showcasing the proposed workflow for obtaining symbolic rules for symbolic audio classification.
+This repo contains Jupyter Notebooks showcasing the proposed workflow for obtaining symbolic rules for symbolic audio classification.
 The two notebooks are
 - [ItaData2024_p_code.ipynb](ItaData2024_p_code.ipynb) for extracting propositional audio classification rules, via the [DecisionTree.jl](https://github.com/JuliaAI/DecisionTree.jl) package.
 - [ItaData2024_m_code.ipynb](ItaData2024_m_code.ipynb) for extracting modal audio classification rules, via the [ModalDecisionTrees.jl](https://github.com/aclai-lab/ModalDecisionTrees.jl) package.
- 
+
+The code uses the `PyCall.jl` Julia package, and the `librosa` python library; ensure you first execute `pycall_librosa_install.jl` to correctly setup the environment for executing the Jupyter Notebooks.
+
 The code for extracting the rules from the learned trees relies [Sole.jl](https://github.com/aclai-lab/Sole.jl), an open-source framework for *symbolic machine learning*, originally designed for machine learning based on modal logics.
 
 The package is mantained by the [ACLAI Lab](https://aclai.unife.it/en/) @ University of Ferrara.
