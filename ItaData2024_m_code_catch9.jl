@@ -395,44 +395,7 @@ pneumonia_indxs = findall(x -> x == "Pneumonia", y_test)
 interesting_features = unique(SoleData.feature.(SoleLogics.value.(vcat(SoleLogics.atoms.(i.antecedent for i in interesting_rules)...))))
 interesting_variables = sort(SoleData.i_variable.(interesting_features))
 
-
-for j in interesting_variables
-    p = plot(X_test[healthy_indxs, j]; 
-        linewidth=3,
-        title="Feature $(variable_names[j]) in healthy patients", 
-        xlabel="Samples",
-        legend=false,
-    )
-    
-end
-plot!(p)
-
-for j in interesting_variables
-    p = plot(X_test[pneumonia_indxs, j]; 
-        linewidth=3,
-        title="Feature $(variable_names[j]) in healthy patients", 
-        xlabel="Samples",
-        legend=false,
-    )
-    plot(p)
-end
-plot!(p)
-
-a = X_test[healthy_indxs, interesting_variables[1]]
-
-p = plot(a; 
-    linewidth=3,
-    title="Selected feature 1 in healthy patients", 
-    xlabel="Samples",
-    legend=false,
-)
-plot!(p;
-    # linewidth=3,
-    # title="Selected feature 1 in healthy patients", 
-    # xlabel="Samples",
-    # legend=false,
-)
-
+# cell 19
 plots = []
 for j in interesting_variables
     name = match(r_select, variable_names[j])[1]
@@ -450,5 +413,58 @@ nrows = Int(ceil(sqrt(n)))
 ncols = Int(ceil(n / nrows))
 
 final_plot = plot(plots..., layout=(nrows, ncols), size=(800, 600))
+display(final_plot)
+
+# cell 20
+plots = []
+for j in interesting_variables
+    name = match(r_select, variable_names[j])[1]
+    p = plot(X_test[healthy_indxs, j],
+        linewidth=3,
+        title="Feature $name",
+        # xlabel="Samples",
+        legend=false,
+    )
+    push!(plots, p)
+end
+
+n = length(interesting_variables)
+nrows = Int(ceil(sqrt(n)))
+ncols = Int(ceil(n / nrows))
+
+final_plot = plot(plots..., layout=(nrows, ncols), size=(800, 600))
+display(final_plot)
+
+# cell 21
+plots = []
+
+for j in interesting_variables
+    name = match(r_select, variable_names[j])[1]
+    
+    p = plot(
+        X_test[healthy_indxs, j],
+        linewidth=3,
+        label="Healthy",
+        linecolor=:blue,
+        title="Feature $name",
+        legend=:false
+    )
+    
+    plot!(
+        p,
+        X_test[pneumonia_indxs, j],
+        linewidth=3,
+        label="Pneumonia",
+        linecolor=:red
+    )
+    
+    push!(plots, p)
+end
+
+n = length(interesting_variables)
+nrows = Int(ceil(sqrt(n)))
+ncols = Int(ceil(n / nrows))
+
+final_plot = plot(plots..., layout=(nrows, ncols), size=(1200, 900))
 display(final_plot)
 
