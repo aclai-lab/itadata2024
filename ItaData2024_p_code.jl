@@ -1,17 +1,18 @@
 using Pkg
-Pkg.activate(joinpath(@__DIR__))
-
-# cell 1
-using MLJ, Sole
-using MLJDecisionTreeInterface
-using SoleDecisionTreeInterface
+Pkg.activate(".")
+using MLJ, ModalDecisionTrees
+using SoleDecisionTreeInterface, Sole, SoleData
 using CategoricalArrays
 using DataFrames, JLD2, CSV
-using StatsBase, Statistics
-using Catch22, Audio911
+using Audio911
+using Random
+using StatsBase, Catch22
+using Test
+using Plots
 
 # cell 2 - Open .jld2 file
-ds_path = "/datasets/respiratory_Healthy_Pneumonia"
+# ds_path = "/datasets/respiratory_Healthy_Pneumonia"
+ds_path = "/datasets/respiratory_Healthy_Bronchiectasis"
 
 d = jldopen(string((@__DIR__), ds_path, ".jld2"))
 x, y = d["dataframe_validated"]
@@ -19,35 +20,34 @@ x, y = d["dataframe_validated"]
 close(d)
 
 # cell 3 - Audio features extraction function
-nan_replacer!(x::AbstractArray{<:AbstractFloat}) = replace!(x, NaN => 0.0)
-nan_replacer!(x::Vector{Vector{Float64}}) = map!(v -> replace!(v, NaN => 0.0), x, x)
+sr = 8000
+audioparams = (
+    sr = sr,
+    nfft = 256,
+    nbands = 14,
+    freq_range = (300, round(Int, sr / 2)),
+    db_scale = true,
+)
 
-function afe(x::AbstractVector{Float64}; get_only_melfreq=false)
+function afe(x::AbstractVector{Float64}; sr::Int64, nfft::Int64, nbands::Int64, freq_range::Tuple{Int64, Int64}, db_scale::Bool, get_only_melfreq=false)
     # -------------------------------- parameters -------------------------------- #
     # audio module
-    sr = 8000
+    sr = sr
     norm = true
     speech_detection = false
     # stft module
-    stft_length = 256
+    nfft = nfft
     win_type = (:hann, :periodic)
-    win_length = 256
-    overlap_length = 128
+    win_length = nfft
+    overlap_length = round(Int, nfft / 2)
     stft_norm = :power                      # :power, :magnitude, :pow2mag
     # mel filterbank module
-    nbands = 26
+    nbands = nbands
     scale = :mel_htk                        # :mel_htk, :mel_slaney, :erb, :bark
     melfb_norm = :bandwidth                 # :bandwidth, :area, :none
-    freq_range = (300, round(Int, sr / 2))
+    freq_range = freq_range
     # mel spectrogram module
-    db_scale = false
-    # mfcc module
-    ncoeffs = 13
-    rectification = :log                    # :log, :cubic_root
-    dither = true
-    # f0 module
-    method = :nfc
-    f0_range = (50, 400)
+    db_scale = db_scale
 
     # --------------------------------- functions -------------------------------- #
     # audio module
@@ -59,7 +59,7 @@ function afe(x::AbstractVector{Float64}; get_only_melfreq=false)
 
     stftspec = get_stft(
         audio=audio,
-        stft_length=stft_length,
+        nfft=nfft,
         win_type=win_type,
         win_length=win_length,
         overlap_length=overlap_length,
@@ -76,7 +76,7 @@ function afe(x::AbstractVector{Float64}; get_only_melfreq=false)
     );
 
     if get_only_melfreq
-        return melfb.freq
+        return melfb.data.freq
     end
 
     # mel spectrogram module
@@ -86,31 +86,14 @@ function afe(x::AbstractVector{Float64}; get_only_melfreq=false)
         db_scale=db_scale
     );
 
-    # mfcc module
-    mfcc = get_mfcc(
-        source=melspec,
-        ncoeffs=ncoeffs,
-        rectification=rectification,
-        dither=dither,
-    );
-
-    # f0 module
-    f0 = get_f0(
-        source=stftspec,
-        method=method,
-        freq_range=f0_range
-    );
-
     # spectral features module
     spect = get_spectrals(
         source=stftspec,
         freq_range=freq_range
     );
 
-    x_features = hcat(
+    hcat(
         melspec.spec',
-        mfcc.mfcc',
-        f0.f0,
         spect.centroid,
         spect.crest,
         spect.entropy,
@@ -123,29 +106,24 @@ function afe(x::AbstractVector{Float64}; get_only_melfreq=false)
         spect.slope,
         spect.spread
     );
-
-    nan_replacer!(x_features)
-
-    return x_features
 end
 
 # cell 4 - Compute DataFrame of features
 color_code = Dict(:red => 31, :green => 32, :yellow => 33, :blue => 34, :magenta => 35, :cyan => 36)
-freq = round.(Int, afe(x[1, :audio]; get_only_melfreq=true))
+freq = round.(Int, afe(x[1, :audio]; audioparams..., get_only_melfreq=true))
 r_select = r"\e\[\d+m(.*?)\e\[0m"
 
 catch9_f = ["max", "min", "mean", "med", "std", "bsm", "bsd", "qnt", "3ac"]
-variable_names = []
-for j in catch9_f
-    global variable_names = vcat(variable_names...,
-        ["\e[$(color_code[:yellow])mmel$i=$(freq[i])Hz->$j\e[0m" for i in 1:26]...,
-        ["\e[$(color_code[:red])mmfcc$i->$j\e[0m" for i in 1:13]...,
-        "\e[$(color_code[:green])mf0->$j\e[0m", "\e[$(color_code[:cyan])mcntrd->$j\e[0m", "\e[$(color_code[:cyan])mcrest->$j\e[0m",
+variable_names = vcat([
+    vcat(
+        ["\e[$(color_code[:yellow])mmel$i=$(freq[i])Hz->$j\e[0m" for i in 1:audioparams.nbands]...,
+        "\e[$(color_code[:cyan])mcntrd->$j\e[0m", "\e[$(color_code[:cyan])mcrest->$j\e[0m",
         "\e[$(color_code[:cyan])mentrp->$j\e[0m", "\e[$(color_code[:cyan])mflatn->$j\e[0m", "\e[$(color_code[:cyan])mflux->$j\e[0m",
         "\e[$(color_code[:cyan])mkurts->$j\e[0m", "\e[$(color_code[:cyan])mrllff->$j\e[0m", "\e[$(color_code[:cyan])mskwns->$j\e[0m",
         "\e[$(color_code[:cyan])mdecrs->$j\e[0m", "\e[$(color_code[:cyan])mslope->$j\e[0m", "\e[$(color_code[:cyan])msprd->$j\e[0m"
     )
-end
+    for j in catch9_f
+]...)
 
 # cell 5 - Data compression for propositional analysis
 catch9 = [
@@ -161,15 +139,16 @@ catch9 = [
 ]
 
 X = DataFrame([name => Float64[] for name in [match(r_select, v)[1] for v in variable_names]])
-audio_feats = [afe(row[:audio]) for row in eachrow(x)]
-push!(X, nan_replacer!(vcat([vcat([map(func, eachcol(row)) for func in catch9]...) for row in audio_feats]))...)
 
-yc = CategoricalArray(y);
+audio_feats = [afe(row[:audio]; audioparams...) for row in eachrow(x)]
+push!(X, vcat([vcat([map(func, eachcol(row)) for func in catch9]...) for row in audio_feats])...)
 
+yc = CategoricalArray(y)
+
+# cell 5 - Compute train and test sets
 train_ratio = 0.8
 
 train, test = partition(eachindex(yc), train_ratio, shuffle=true)
-# train, test = partition(eachindex(yc), train_ratio, shuffle=false) ### Debug
 X_train, y_train = X[train, :], yc[train]
 X_test, y_test = X[test, :], yc[test]
 

@@ -144,3 +144,9 @@ function show_subdf(df::DataFrame, label::Symbol)
         println("Sub_df ", i[1,label], ", total amount of samples: $(nrow(i)).")
     end
 end
+
+# ---------------------------------------------------------------------------- #
+#                                 audio utils                                  #
+# ---------------------------------------------------------------------------- #
+nan_replacer!(x::AbstractArray{<:AbstractFloat}) = replace!(x, NaN => 0.0)
+nan_replacer!(x::Vector{Vector{Float64}}) = map!(v -> replace!(v, NaN => 0.0), x, x)
