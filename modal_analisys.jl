@@ -30,16 +30,24 @@ features = :catch9
 # load_jld2 = false;
 load_jld2 = true;
 
+# experiment = :pneumonia
+experiment = :bronchiectasis
+
 # memguard = false;
 memguard = true;
 
-# ds_path = "/datasets/respiratory_Healthy_Pneumonia"
-ds_path = "/datasets/respiratory_Healthy_Bronchiectasis"
-
-# filename = "datasets/itadata2024_pneumonia_files"
-# filename = "datasets/itadata2024_pneumonia_files_memguard"
-# filename = "datasets/itadata2024_bronchiectasis_files"
-filename = "datasets/itadata2024_bronchiectasis_files_memguard"
+findhealthy = y -> findall(x -> x == "Healthy", y)
+if experiment == :pneumonia
+    ds_path = "/datasets/respiratory_Healthy_Pneumonia"
+    findsick = y -> findall(x -> x == "Pneumonia", y)
+    memguard ? filename = "datasets/itadata2024_pneumonia_files_memguard" : filename = "datasets/itadata2024_pneumonia_files"
+elseif experiment == :bronchiectasis
+    ds_path = "/datasets/respiratory_Healthy_Bronchiectasis"
+    findsick = y -> findall(x -> x == "Bronchiectasis", y)
+    memguard ? filename = "datasets/itadata2024_bronchiectasis_files_memguard" : filename = "datasets/itadata2024_bronchiectasis_files"
+else
+    error("Unknown type of experiment: $experiment.")
+end
 
 color_code = Dict(:red => 31, :green => 32, :yellow => 33, :blue => 34, :magenta => 35, :cyan => 36)
 

@@ -8,16 +8,21 @@ using Audio911
 using Random
 using StatsBase, Catch22
 
+# experiment = :pneumonia
+experiment = :bronchiectasis
+
 # memguard = false;
 memguard = true;
 
-ds_path = "/datasets/respiratory_Healthy_Pneumonia"
-# ds_path = "/datasets/respiratory_Healthy_Bronchiectasis"
-
-# filename = "/datasets/itadata2024_pneumonia_files"
-filename = "/datasets/itadata2024_pneumonia_files_memguard"
-# filename = "/datasets/itadata2024_bronchiectasis_files"
-# filename = "/datasets/itadata2024_bronchiectasis_files_memguard"
+if experiment == :pneumonia
+    ds_path = "/datasets/respiratory_Healthy_Pneumonia"
+    memguard ? filename = "datasets/itadata2024_pneumonia_files_memguard" : filename = "datasets/itadata2024_pneumonia_files"
+elseif experiment == :bronchiectasis
+    ds_path = "/datasets/respiratory_Healthy_Bronchiectasis"
+    memguard ? filename = "datasets/itadata2024_bronchiectasis_files_memguard" : filename = "datasets/itadata2024_bronchiectasis_files"
+else
+    error("Unknown type of experiment: $experiment.")
+end
 
 @info("Start building dataset...")
 d = jldopen(string((@__DIR__), ds_path, ".jld2"))

@@ -10,16 +10,9 @@ using StatsBase, Catch22
 using Test
 using Plots
 
-# cell 2 - Open .jld2 file
-# ds_path = "/datasets/respiratory_Healthy_Pneumonia"
-ds_path = "/datasets/respiratory_Healthy_Bronchiectasis"
-
-d = jldopen(string((@__DIR__), ds_path, ".jld2"))
-x, y = d["dataframe_validated"]
-@assert x isa DataFrame
-close(d)
-
-# cell 3 - Audio features extraction function
+# ---------------------------------------------------------------------------- #
+#                                    settings                                  #
+# ---------------------------------------------------------------------------- #
 sr = 8000
 audioparams = (
     sr = sr,
@@ -29,6 +22,28 @@ audioparams = (
     db_scale = true,
 )
 
+# experiment = :pneumonia
+experiment = :bronchiectasis
+
+findhealthy = y -> findall(x -> x == "Healthy", y)
+if experiment == :pneumonia
+    ds_path = "/datasets/respiratory_Healthy_Pneumonia"
+    findsick = y -> findall(x -> x == "Pneumonia", y)
+elseif experiment == :bronchiectasis
+    ds_path = "/datasets/respiratory_Healthy_Bronchiectasis"
+    findsick = y -> findall(x -> x == "Bronchiectasis", y)
+else
+    error("Unknown type of experiment: $experiment.")
+end
+
+d = jldopen(string((@__DIR__), ds_path, ".jld2"))
+x, y = d["dataframe_validated"]
+@assert x isa DataFrame
+close(d)
+
+# ---------------------------------------------------------------------------- #
+#                      audio features extraction function                      #
+# ---------------------------------------------------------------------------- #
 function afe(x::AbstractVector{Float64}; sr::Int64, nfft::Int64, nbands::Int64, freq_range::Tuple{Int64, Int64}, db_scale::Bool, get_only_melfreq=false)
     # -------------------------------- parameters -------------------------------- #
     # audio module
@@ -108,7 +123,9 @@ function afe(x::AbstractVector{Float64}; sr::Int64, nfft::Int64, nbands::Int64, 
     );
 end
 
-# cell 4 - Compute DataFrame of features
+# ---------------------------------------------------------------------------- #
+#                        prepare dataset for analysis                          #
+# ---------------------------------------------------------------------------- #
 color_code = Dict(:red => 31, :green => 32, :yellow => 33, :blue => 34, :magenta => 35, :cyan => 36)
 freq = round.(Int, afe(x[1, :audio]; audioparams..., get_only_melfreq=true))
 r_select = r"\e\[\d+m(.*?)\e\[0m"
@@ -125,7 +142,6 @@ variable_names = vcat([
     for j in catch9_f
 ]...)
 
-# cell 5 - Data compression for propositional analysis
 catch9 = [
     maximum,
     minimum,
@@ -145,7 +161,6 @@ push!(X, vcat([vcat([map(func, eachcol(row)) for func in catch9]...) for row in 
 
 yc = CategoricalArray(y)
 
-# cell 5 - Compute train and test sets
 train_ratio = 0.8
 
 train, test = partition(eachindex(yc), train_ratio, shuffle=true)
@@ -155,7 +170,9 @@ X_test, y_test = X[test, :], yc[test]
 println("Training set size: ", size(X_train), " - ", length(y_train))
 println("Test set size: ", size(X_test), " - ", length(y_test))
 
-# cell 6 - Train a model
+# ---------------------------------------------------------------------------- #
+#                                  train a model                               #
+# ---------------------------------------------------------------------------- #
 learned_dt_tree = begin
     Tree = MLJ.@load DecisionTreeClassifier pkg=DecisionTree
     model = Tree(max_depth=-1, )
@@ -164,26 +181,54 @@ learned_dt_tree = begin
     fitted_params(mach).tree
 end
 
-# cell 7 - Model inspection & rule study
+# ---------------------------------------------------------------------------- #
+#                         model inspection & rule study                        #
+# ---------------------------------------------------------------------------- #
 sole_dt = solemodel(learned_dt_tree)
 # Make test instances flow into the model, so that test metrics can, then, be computed.
 apply!(sole_dt, X_test, y_test);
 # Print Sole model
 printmodel(sole_dt; show_metrics = true, variable_names_map = variable_names);
 
-# cell 8 - Extract rules that are at least as good as a random baseline model
+# ---------------------------------------------------------------------------- #
+#     extract rules that are at least as good as a random baseline model       #
+# ---------------------------------------------------------------------------- #
 interesting_rules = listrules(sole_dt, min_lift = 1.0, min_ninstances = 0);
 printmodel.(interesting_rules; show_metrics = true, variable_names_map = variable_names);
 
-# cell 9 - Simplify rules while extracting and prettify result
+# ---------------------------------------------------------------------------- #
+#            simplify rules while extracting and prettify result               #
+# ---------------------------------------------------------------------------- #
 interesting_rules = listrules(sole_dt, min_lift = 1.0, min_ninstances = 0, normalize = true);
 printmodel.(interesting_rules; show_metrics = true, syntaxstring_kwargs = (; threshold_digits = 2), variable_names_map = variable_names);
 
-# cell 10 - Directly access rule metrics
+# ---------------------------------------------------------------------------- #
+#                         directly access rule metrics                         #
+# ---------------------------------------------------------------------------- #
 readmetrics.(listrules(sole_dt; min_lift=1.0, min_ninstances = 0))
 
-# cell 11 - Show rules with an additional metric (syntax height of the rule's antecedent)
+# ---------------------------------------------------------------------------- #
+# show rules with an additional metric (syntax height of the rule's antecedent)#
+# ---------------------------------------------------------------------------- #
 printmodel.(sort(interesting_rules, by = readmetrics); show_metrics = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))), variable_names_map = variable_names);
 
-# cell 12 - Pretty table of rules and their metrics
+# ---------------------------------------------------------------------------- #
+#                   pretty table of rules and their metrics                    #
+# ---------------------------------------------------------------------------- #
 metricstable(interesting_rules; variable_names_map = variable_names, metrics_kwargs = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))))
+
+# ---------------------------------------------------------------------------- #
+#                             inspecting features                              #
+# ---------------------------------------------------------------------------- #
+interesting_rules = listrules(sole_dt,
+	min_lift = 1.0,
+	# min_lift = 2.0,
+	min_ninstances = 0,
+	min_coverage = 0.10,
+	normalize = true,
+);
+map(r->(consequent(r), readmetrics(r)), interesting_rules)
+printmodel.(interesting_rules; show_metrics = true, syntaxstring_kwargs = (; threshold_digits = 2), variable_names_map=variable_names);
+
+interesting_features = unique(SoleData.feature.(SoleLogics.value.(vcat(SoleLogics.atoms.(i.antecedent for i in interesting_rules)...))))
+interesting_variables = sort(SoleData.i_variable.(interesting_features))
