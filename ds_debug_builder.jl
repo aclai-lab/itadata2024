@@ -11,15 +11,15 @@ using StatsBase, Catch22
 # experiment = :pneumonia
 experiment = :bronchiectasis
 
-# memguard = false;
-memguard = true;
+memguard = false;
+# memguard = true;
 
 if experiment == :pneumonia
     ds_path = "/datasets/respiratory_Healthy_Pneumonia"
-    memguard ? filename = "datasets/itadata2024_pneumonia_files_memguard" : filename = "datasets/itadata2024_pneumonia_files"
+    memguard ? filename = "/datasets/itadata2024_pneumonia_files_memguard" : filename = "/datasets/itadata2024_pneumonia_files"
 elseif experiment == :bronchiectasis
     ds_path = "/datasets/respiratory_Healthy_Bronchiectasis"
-    memguard ? filename = "datasets/itadata2024_bronchiectasis_files_memguard" : filename = "datasets/itadata2024_bronchiectasis_files"
+    memguard ? filename = "/datasets/itadata2024_bronchiectasis_files_memguard" : filename = "/datasets/itadata2024_bronchiectasis_files"
 else
     error("Unknown type of experiment: $experiment.")
 end
