@@ -13,56 +13,82 @@ using Plots
 # ---------------------------------------------------------------------------- #
 #                                    settings                                  #
 # ---------------------------------------------------------------------------- #
+experiment = :Pneumonia
+# experiment = :Bronchiectasis
+# experiment = :COPD
+# experiment = :URTI
+# experiment = :Bronchiolitis
+
+features = :catch9
+# features = :minmax
+# features = :custom
+
+loadset = false
+# loadset = true
+
+scale = :semitones
+# scale = :mel_htk
+
+usemfcc = false
+# usemfcc = true
+usef0 = false
+# usef0 = true
+
 sr = 8000
 audioparams = (
+    usemfcc = usemfcc,
+    usef0 = usef0,
     sr = sr,
-    nfft = 256,
-    nbands = 14,
+    nfft = 512,
+    scale = scale, # :mel_htk, :mel_slaney, :erb, :bark, :semitones, :tuned_semitones
+    nbands = scale == :semitones ? 14 : 26,
+    ncoeffs = scale == :semitones ? 7 : 13,
     freq_range = (300, round(Int, sr / 2)),
-    db_scale = true,
+    db_scale = usemfcc ? false : true,
 )
 
-# experiment = :pneumonia
-experiment = :bronchiectasis
+memguard = false;
+# memguard = true;
+n_elems = 15;
+
+avail_exp = [:Pneumonia, :Bronchiectasis, :COPD, :URTI, :Bronchiolitis]
+
+@assert experiment in avail_exp "Unknown type of experiment: $experiment."
 
 findhealthy = y -> findall(x -> x == "Healthy", y)
-if experiment == :pneumonia
-    ds_path = "/datasets/respiratory_Healthy_Pneumonia"
-    findsick = y -> findall(x -> x == "Pneumonia", y)
-elseif experiment == :bronchiectasis
-    ds_path = "/datasets/respiratory_Healthy_Bronchiectasis"
-    findsick = y -> findall(x -> x == "Bronchiectasis", y)
-else
-    error("Unknown type of experiment: $experiment.")
-end
+ds_path = "/datasets/respiratory_Healthy_" * String(experiment)
+findsick = y -> findall(x -> x == String(experiment), y)
+filename = "/datasets/itadata2024_" * String(experiment) * "_files"
+memguard && begin filename *= string("_memguard") end
 
-d = jldopen(string((@__DIR__), ds_path, ".jld2"))
-x, y = d["dataframe_validated"]
-@assert x isa DataFrame
-close(d)
+destpath = "results/propositional"
+jld2file = destpath * "/itadata2024_" * String(experiment) * "_" * String(scale) * ".jld2"
+
+color_code = Dict(:red => 31, :green => 32, :yellow => 33, :blue => 34, :magenta => 35, :cyan => 36);
+r_select = r"\e\[\d+m(.*?)\e\[0m";
 
 # ---------------------------------------------------------------------------- #
 #                      audio features extraction function                      #
 # ---------------------------------------------------------------------------- #
-function afe(x::AbstractVector{Float64}; sr::Int64, nfft::Int64, nbands::Int64, freq_range::Tuple{Int64, Int64}, db_scale::Bool, get_only_melfreq=false)
+function afe(x::AbstractVector{Float64}, audioparams::NamedTuple; get_only_melfreq=false)
     # -------------------------------- parameters -------------------------------- #
     # audio module
-    sr = sr
+    sr = audioparams.sr
     norm = true
     speech_detection = false
     # stft module
-    nfft = nfft
+    nfft = audioparams.nfft
     win_type = (:hann, :periodic)
-    win_length = nfft
-    overlap_length = round(Int, nfft / 2)
+    win_length = audioparams.nfft
+    overlap_length = round(Int, audioparams.nfft / 2)
     stft_norm = :power                      # :power, :magnitude, :pow2mag
     # mel filterbank module
-    nbands = nbands
-    scale = :mel_htk                        # :mel_htk, :mel_slaney, :erb, :bark
+    nbands = audioparams.nbands
+    scale = audioparams.scale               # :mel_htk, :mel_slaney, :erb, :bark, :semitones, :tuned_semitones
     melfb_norm = :bandwidth                 # :bandwidth, :area, :none
-    freq_range = freq_range
+    freq_range = audioparams.freq_range
     # mel spectrogram module
-    db_scale = db_scale
+    db_scale = audioparams.db_scale
 
     # --------------------------------- functions -------------------------------- #
     # audio module
@@ -101,6 +127,32 @@ function afe(x::AbstractVector{Float64}; sr::Int64, nfft::Int64, nbands::Int64, 
         db_scale=db_scale
     );
 
+    if audioparams.usemfcc
+        # mfcc module
+        ncoeffs = audioparams.ncoeffs
+        rectification = :log                    # :log, :cubic_root
+        dither = true
+
+        mfcc = get_mfcc(
+            source=melspec,
+            ncoeffs=ncoeffs,
+            rectification=rectification,
+            dither=dither,
+        );
+    end
+
+    if audioparams.usef0
+        # f0 module
+        method = :nfc
+        f0_range = (50, 400)
+
+        f0 = get_f0(
+            source=stftspec,
+            method=method,
+            freq_range=f0_range
+        );
+    end
+
     # spectral features module
     spect = get_spectrals(
         source=stftspec,
@@ -108,40 +160,56 @@ function afe(x::AbstractVector{Float64}; sr::Int64, nfft::Int64, nbands::Int64, 
     );
 
     hcat(
-        melspec.spec',
-        spect.centroid,
-        spect.crest,
-        spect.entropy,
-        spect.flatness,
-        spect.flux,
-        spect.kurtosis,
-        spect.rolloff,
-        spect.skewness,
-        spect.decrease,
-        spect.slope,
-        spect.spread
-    );
+        filter(!isnothing, [
+            melspec.spec',
+            audioparams.usemfcc ? mfcc.mfcc' : nothing,
+            audioparams.usef0 ? f0.f0 : nothing,
+            spect.centroid,
+            spect.crest,
+            spect.entropy,
+            spect.flatness,
+            spect.flux,
+            spect.kurtosis,
+            spect.rolloff,
+            spect.skewness,
+            spect.decrease,
+            spect.slope,
+            spect.spread
+        ])...
+    )    
 end
 
 # ---------------------------------------------------------------------------- #
-#                        prepare dataset for analysis                          #
+#                       prepare dataset for training                           #
 # ---------------------------------------------------------------------------- #
-color_code = Dict(:red => 31, :green => 32, :yellow => 33, :blue => 34, :magenta => 35, :cyan => 36)
-freq = round.(Int, afe(x[1, :audio]; audioparams..., get_only_melfreq=true))
-r_select = r"\e\[\d+m(.*?)\e\[0m"
+d = jldopen(string((@__DIR__), ds_path, ".jld2"))
+x, y = d["dataframe_validated"]
+@assert x isa DataFrame
+close(d)
+
+memguard && begin
+    cat2 = round(Int, length(y)/2)
+    indices = [1:n_elems; cat2:cat2+n_elems-1]
+    x = x[indices, :]
+    y = y[indices]
+end
+
+freq = round.(Int, afe(x[1, :audio], audioparams; get_only_melfreq=true))
 
 catch9_f = ["max", "min", "mean", "med", "std", "bsm", "bsd", "qnt", "3ac"]
 variable_names = vcat([
     vcat(
-        ["\e[$(color_code[:yellow])mmel$i=$(freq[i])Hz->$j\e[0m" for i in 1:audioparams.nbands]...,
-        "\e[$(color_code[:cyan])mcntrd->$j\e[0m", "\e[$(color_code[:cyan])mcrest->$j\e[0m",
-        "\e[$(color_code[:cyan])mentrp->$j\e[0m", "\e[$(color_code[:cyan])mflatn->$j\e[0m", "\e[$(color_code[:cyan])mflux->$j\e[0m",
-        "\e[$(color_code[:cyan])mkurts->$j\e[0m", "\e[$(color_code[:cyan])mrllff->$j\e[0m", "\e[$(color_code[:cyan])mskwns->$j\e[0m",
-        "\e[$(color_code[:cyan])mdecrs->$j\e[0m", "\e[$(color_code[:cyan])mslope->$j\e[0m", "\e[$(color_code[:cyan])msprd->$j\e[0m"
+        ["\e[$(color_code[:yellow])m$j(mel$i=$(freq[i])Hz)\e[0m" for i in 1:audioparams.nbands],
+        audioparams.usemfcc ? ["\e[$(color_code[:red])m$j(mfcc$i)\e[0m" for i in 1:audioparams.ncoeffs] : String[],
+        audioparams.usef0 ? ["\e[$(color_code[:green])m$j(f0)\e[0m"] : String[],
+        "\e[$(color_code[:cyan])m$j(cntrd)\e[0m", "\e[$(color_code[:cyan])m$j(crest)\e[0m",
+        "\e[$(color_code[:cyan])m$j(entrp)\e[0m", "\e[$(color_code[:cyan])m$j(flatn)\e[0m", "\e[$(color_code[:cyan])m$j(flux)\e[0m",
+        "\e[$(color_code[:cyan])m$j(kurts)\e[0m", "\e[$(color_code[:cyan])m$j(rllff)\e[0m", "\e[$(color_code[:cyan])m$j(skwns)\e[0m",
+        "\e[$(color_code[:cyan])m$j(decrs)\e[0m", "\e[$(color_code[:cyan])m$j(slope)\e[0m", "\e[$(color_code[:cyan])m$j(sprd)\e[0m"
     )
     for j in catch9_f
 ]...)
-
+    
 catch9 = [
     maximum,
     minimum,
@@ -154,39 +222,84 @@ catch9 = [
     Catch22.SB_TransitionMatrix_3ac_sumdiagcov,
 ]
 
-X = DataFrame([name => Float64[] for name in [match(r_select, v)[1] for v in variable_names]])
+### TODO
+# catch9 = [
+#     maximum, ##
+#     # minimum,
+#     # StatsBase.mean,
+#     # median,
+#     std, ##
+#     # Catch22.SB_BinaryStats_mean_longstretch1,
+#     # Catch22.SB_BinaryStats_diff_longstretch0,
+#     # Catch22.SB_MotifThree_quantile_hh,
+#     # Catch22.SB_TransitionMatrix_3ac_sumdiagcov,
+#     Catch22.DN_HistogramMode_5, ##
+#     # Catch22.DN_HistogramMode_10,
+#     # Catch22.CO_Embed2_Dist_tau_d_expfit_meandiff,
+#     Catch22.CO_f1ecac, ##
+#     # Catch22.CO_FirstMin_ac,
+#     Catch22.CO_HistogramAMI_even_2_5, ##
+#     # Catch22.CO_trev_1_num,
+#     # Catch22.DN_OutlierInclude_p_001_mdrmd,
+#     # Catch22.DN_OutlierInclude_n_001_mdrmd,
+#     # Catch22.FC_LocalSimple_mean1_tauresrat,
+#     Catch22.FC_LocalSimple_mean3_stderr, #
+#     # Catch22.IN_AutoMutualInfoStats_40_gaussian_fmmi,
+#     Catch22.MD_hrv_classic_pnn40, #
+#     # Catch22.SC_FluctAnal_2_rsrangefit_50_1_logi_prop_r1,
+#     # Catch22.SC_FluctAnal_2_dfa_50_1_2_logi_prop_r1,
+#     Catch22.SP_Summaries_welch_rect_area_5_1, #
+#     Catch22.SP_Summaries_welch_rect_centroid, ##
+#     # Catch22.PD_PeriodicityWang_th0_01,
+# ]
 
-audio_feats = [afe(row[:audio]; audioparams...) for row in eachrow(x)]
-push!(X, vcat([vcat([map(func, eachcol(row)) for func in catch9]...) for row in audio_feats])...)
+if !loadset
+    @info("Build dataset...")
 
-yc = CategoricalArray(y)
+    X = DataFrame([name => Float64[] for name in [match(r_select, v)[1] for v in variable_names]])
+    audiofeats = [afe(row[:audio], audioparams) for row in eachrow(x)]
+    push!(X, vcat([vcat([map(func, eachcol(row)) for func in catch9]...) for row in audiofeats])...)
 
-train_ratio = 0.8
+    yc = CategoricalArray(y);
 
-train, test = partition(eachindex(yc), train_ratio, shuffle=true)
-X_train, y_train = X[train, :], yc[train]
-X_test, y_test = X[test, :], yc[test]
+    train_ratio = 0.8
 
-println("Training set size: ", size(X_train), " - ", length(y_train))
-println("Test set size: ", size(X_test), " - ", length(y_test))
+    train, test = partition(eachindex(yc), train_ratio, shuffle=true)
+    X_train, y_train = X[train, :], yc[train]
+    X_test, y_test = X[test, :], yc[test]
+
+    println("Training set size: ", size(X_train), " - ", length(y_train))
+    println("Test set size: ", size(X_test), " - ", length(y_test))
+end
 
 # ---------------------------------------------------------------------------- #
 #                                  train a model                               #
 # ---------------------------------------------------------------------------- #
-learned_dt_tree = begin
-    Tree = MLJ.@load DecisionTreeClassifier pkg=DecisionTree
-    model = Tree(max_depth=-1, )
-    mach = machine(model, X_train, y_train)
-    fit!(mach)
-    fitted_params(mach).tree
+if !loadset
+    learned_dt_tree = begin
+        Tree = MLJ.@load DecisionTreeClassifier pkg=DecisionTree
+        model = Tree(max_depth=-1, )
+        mach = machine(model, X_train, y_train)
+        fit!(mach)
+        fitted_params(mach).tree
+    end
 end
 
 # ---------------------------------------------------------------------------- #
 #                         model inspection & rule study                        #
 # ---------------------------------------------------------------------------- #
-sole_dt = solemodel(learned_dt_tree)
-# Make test instances flow into the model, so that test metrics can, then, be computed.
-apply!(sole_dt, X_test, y_test);
+if !loadset
+    sole_dt = solemodel(learned_dt_tree)
+    # Make test instances flow into the model, so that test metrics can, then, be computed.
+    apply!(sole_dt, X_test, y_test);
+    # Save solemodel to disk
+    jldsave(jld2file, true; sole_dt)
+else
+    @info("Load dataset...")
+    d = jldopen(jld2file)
+    sole_dt = d["sole_dt"]
+    close(d)
+end
 # Print Sole model
 printmodel(sole_dt; show_metrics = true, variable_names_map = variable_names);
 

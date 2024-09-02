@@ -18,8 +18,8 @@ rng = MersenneTwister(seed)
 # -------------------------------------------------------------------------- #
 sr=8000
 
-# keep_only = ["Healthy", "Pneumonia"]
-keep_only = ["Healthy", "Bronchiectasis"]
+keep_only = ["Healthy", "Pneumonia"]
+# keep_only = ["Healthy", "Bronchiectasis"]
 # keep_only = ["Healthy", "COPD"]
 # keep_only = ["Healthy", "URTI"]
 # keep_only = ["Healthy", "Bronchiolitis"]
