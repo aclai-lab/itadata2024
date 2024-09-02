@@ -351,3 +351,8 @@ printmodel.(interesting_rules; show_metrics = true, syntaxstring_kwargs = (; thr
 
 interesting_features = unique(SoleData.feature.(SoleLogics.value.(vcat(SoleLogics.atoms.(i.antecedent for i in interesting_rules)...))))
 interesting_variables = sort(SoleData.i_variable.(interesting_features))
+
+
+## round_digits = 2, min_ncovered = 3, cosi vedi solo quelle che hanno massimo 3 regole, anche in tutti i printmodel
+## converti la tabella prettytable in dataframe
+
