@@ -63,6 +63,7 @@ memguard && begin filename *= string("_memguard") end
 
 destpath = "results/propositional"
 jld2file = destpath * "/itadata2024_" * String(experiment) * "_" * String(scale) * ".jld2"
+dsfile = destpath * "/ds_test_" * String(experiment) * "_" * String(scale) * ".jld2"
 
 color_code = Dict(:red => 31, :green => 32, :yellow => 33, :blue => 34, :magenta => 35, :cyan => 36);
 r_select = r"\e\[\d+m(.*?)\e\[0m";
@@ -267,6 +268,7 @@ if !loadset
     train, test = partition(eachindex(yc), train_ratio, shuffle=true)
     X_train, y_train = X[train, :], yc[train]
     X_test, y_test = X[test, :], yc[test]
+    save(dsfile, Dict("X_test" => X_test, "y_test" => y_test))
 
     println("Training set size: ", size(X_train), " - ", length(y_train))
     println("Test set size: ", size(X_test), " - ", length(y_test))
@@ -293,9 +295,13 @@ if !loadset
     # Make test instances flow into the model, so that test metrics can, then, be computed.
     apply!(sole_dt, X_test, y_test);
     # Save solemodel to disk
-    jldsave(jld2file, true; sole_dt)
+    save(jld2file, Dict("sole_dt" => sole_dt))
 else
     @info("Load dataset...")
+    d = jldopen(dsfile)
+    X_test = d["X_test"]
+    y_test = d["y_test"]
+    close(d)
     d = jldopen(jld2file)
     sole_dt = d["sole_dt"]
     close(d)
