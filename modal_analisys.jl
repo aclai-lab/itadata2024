@@ -29,22 +29,22 @@ loadset = true
 scale = :semitones
 # scale = :mel_htk
 
-usemfcc = false
-# usemfcc = true
-usef0 = false
-# usef0 = true
-
 sr = 8000
+
+featset = ()
+# featset = (:mfcc,)
+# featset = (:f0,)
+# featset = (:mfcc, :f0)
+
 audioparams = (
-    usemfcc = usemfcc,
-    usef0 = usef0,
     sr = sr,
-    nfft = 256,
-    scale = scale, # :mel_htk, :mel_slaney, :erb, :bark, :semitones, :tuned_semitones
-    nbands = scale == :semitones ? 14 : 26,
-    ncoeffs = scale == :semitones ? 7 : 13,
-    freq_range = (300, round(Int, sr / 2)),
-    db_scale = usemfcc ? false : true,
+    nfft = 512,
+    mel_scale = scale, # :mel_htk, :mel_slaney, :erb, :bark, :semitones, :tuned_semitones
+    mel_nbands = scale == :semitones ? 14 : 26,
+    mfcc_ncoeffs = scale == :semitones ? 7 : 13,
+    mel_freqrange = (300, round(Int, sr / 2)),
+    mel_dbscale = :mfcc in featset ? false : true,
+    audio_norm = true,
 )
 
 memguard = false
@@ -62,7 +62,7 @@ filename = "/datasets/itadata2024_" * String(experiment) * "_files"
 memguard && begin filename *= string("_memguard") end
 
 destpath = "results/modal/$scale"
-usemfcc ? destpath *= "_mfcc/" : destpath *= "/"
+:mfcc in featset ? destpath *= "_mfcc/" : destpath *= "/"
 jld2file = destpath * "/itadata2024_" * String(experiment) * "_" * String(scale) * ".jld2"
 dsfile = destpath * "/ds_test_" * String(experiment) * "_" * String(scale) * ".jld2"
 
@@ -70,117 +70,8 @@ color_code = Dict(:red => 31, :green => 32, :yellow => 33, :blue => 34, :magenta
 r_select = r"\e\[\d+m(.*?)\e\[0m";
 
 # ---------------------------------------------------------------------------- #
-#           audio processing and handling of nan values functions              #
+#                      handling of nan values functions                        #
 # ---------------------------------------------------------------------------- #
-function afe(x::AbstractVector{Float64}, audioparams::NamedTuple; get_only_melfreq=false)
-    # -------------------------------- parameters -------------------------------- #
-    # audio module
-    sr = audioparams.sr
-    norm = true
-    speech_detection = false
-    # stft module
-    nfft = audioparams.nfft
-    win_type = (:hann, :periodic)
-    win_length = audioparams.nfft
-    overlap_length = round(Int, audioparams.nfft / 2)
-    stft_norm = :power                      # :power, :magnitude, :pow2mag
-    # mel filterbank module
-    nbands = audioparams.nbands
-    scale = audioparams.scale               # :mel_htk, :mel_slaney, :erb, :bark, :semitones, :tuned_semitones
-    melfb_norm = :bandwidth                 # :bandwidth, :area, :none
-    freq_range = audioparams.freq_range
-    # mel spectrogram module
-    db_scale = audioparams.db_scale
-
-    # --------------------------------- functions -------------------------------- #
-    # audio module
-    audio = load_audio(
-        file=x,
-        sr=sr,
-        norm=norm,
-    );
-
-    stftspec = get_stft(
-        audio=audio,
-        nfft=nfft,
-        win_type=win_type,
-        win_length=win_length,
-        overlap_length=overlap_length,
-        norm=stft_norm
-    );
-
-    # mel filterbank module
-    melfb = get_melfb(
-        stft=stftspec,
-        mfb_nbands=nbands,
-        mfb_scale=scale,
-        mfb_norm=melfb_norm,
-        mfb_freqrange=freq_range
-    );
-
-    if get_only_melfreq
-        return melfb.data.freq
-    end
-
-    # mel spectrogram module
-    melspec =  get_melspec(
-        stft=stftspec,
-        fbank=melfb,
-        mel_dbscale=db_scale
-    );
-
-    if audioparams.usemfcc
-        # mfcc module
-        ncoeffs = audioparams.ncoeffs
-        rectification = :log                    # :log, :cubic_root
-        dither = true
-
-        mfcc = get_mfcc(
-            source=melspec,
-            ncoeffs=ncoeffs,
-            rectification=rectification,
-            dither=dither,
-        );
-    end
-
-    if audioparams.usef0
-        # f0 module
-        method = :nfc
-        f0_range = (50, 400)
-
-        f0 = get_f0(
-            source=stftspec,
-            method=method,
-            freq_range=f0_range
-        );
-    end
-
-    # spectral features module
-    spect = get_spectrals(
-        source=stftspec,
-        freq_range=freq_range
-    );
-
-    hcat(
-        filter(!isnothing, [
-            melspec.data.spec',
-            audioparams.usemfcc ? mfcc.data.spec' : nothing,
-            audioparams.usef0 ? f0.f0 : nothing,
-            spect.centroid,
-            spect.crest,
-            spect.entropy,
-            spect.flatness,
-            spect.flux,
-            spect.kurtosis,
-            spect.rolloff,
-            spect.skewness,
-            spect.decrease,
-            spect.slope,
-            spect.spread
-        ])...
-    )    
-end
-
 function mean_longstretch1(x) Catch22.SB_BinaryStats_mean_longstretch1((x)) end
 function diff_longstretch0(x) Catch22.SB_BinaryStats_diff_longstretch0((x)) end
 function quantile_hh(x) Catch22.SB_MotifThree_quantile_hh((x)) end
@@ -213,12 +104,12 @@ memguard && begin
     y = y[indices]
 end
 
-freq = round.(Int, afe(x[1, :audio], audioparams; get_only_melfreq=true))
+freq = round.(Int, afe(x[1, :audio]; featset=(:get_only_freqs), audioparams...))
 
 variable_names = vcat(
-    ["\e[$(color_code[:yellow])mmel$i=$(freq[i])Hz\e[0m" for i in 1:audioparams.nbands],
-    audioparams.usemfcc ? ["\e[$(color_code[:red])mmfcc$i\e[0m" for i in 1:audioparams.ncoeffs] : String[],
-    audioparams.usef0 ? ["\e[$(color_code[:green])mf0\e[0m"] : String[],
+    ["\e[$(color_code[:yellow])mmel$i=$(freq[i])Hz\e[0m" for i in 1:audioparams.mel_nbands],
+    :mfcc in featset ? ["\e[$(color_code[:red])mmfcc$i\e[0m" for i in 1:audioparams.mfcc_ncoeffs] : String[],
+    :f0 in featset ? ["\e[$(color_code[:green])mf0\e[0m"] : String[],
     "\e[$(color_code[:cyan])mcntrd\e[0m", "\e[$(color_code[:cyan])mcrest\e[0m",
     "\e[$(color_code[:cyan])mentrp\e[0m", "\e[$(color_code[:cyan])mflatn\e[0m", "\e[$(color_code[:cyan])mflux\e[0m",
     "\e[$(color_code[:cyan])mkurts\e[0m", "\e[$(color_code[:cyan])mrllff\e[0m", "\e[$(color_code[:cyan])mskwns\e[0m",
@@ -290,7 +181,7 @@ if !loadset
     X = DataFrame([name => Vector{Float64}[] for name in [match(r_select, v)[1] for v in variable_names]])
 
     for i in 1:nrow(x)
-        audiofeats = collect(eachcol(afe(x[i, :audio], audioparams)))
+        audiofeats = collect(eachcol(afe(x[i, :audio]; featset=featset, audioparams...)))
         # perform moving windows on mean
         audiowindowed = movingwindowmean.(audiofeats; nwindows = 20, relative_overlap = 0.05)
         push!(X, audiowindowed)
