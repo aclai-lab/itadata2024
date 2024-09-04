@@ -23,8 +23,8 @@ features = :catch9
 # features = :minmax
 # features = :custom
 
-loadset = false
-# loadset = true
+# loadset = false
+loadset = true
 
 scale = :semitones
 # scale = :mel_htk
@@ -47,8 +47,8 @@ audioparams = (
     db_scale = usemfcc ? false : true,
 )
 
-# memguard = false
-memguard = true
+memguard = false
+# memguard = true
 n_elems = 20
 
 avail_exp = [:Pneumonia, :Bronchiectasis, :COPD, :URTI, :Bronchiolitis]
@@ -61,7 +61,8 @@ findsick = y -> findall(x -> x == String(experiment), y)
 filename = "/datasets/itadata2024_" * String(experiment) * "_files"
 memguard && begin filename *= string("_memguard") end
 
-destpath = "results/modal"
+destpath = "results/modal/$scale"
+usemfcc ? destpath *= "_mfcc/" : destpath *= "/"
 jld2file = destpath * "/itadata2024_" * String(experiment) * "_" * String(scale) * ".jld2"
 dsfile = destpath * "/ds_test_" * String(experiment) * "_" * String(scale) * ".jld2"
 
@@ -111,10 +112,10 @@ function afe(x::AbstractVector{Float64}, audioparams::NamedTuple; get_only_melfr
     # mel filterbank module
     melfb = get_melfb(
         stft=stftspec,
-        nbands=nbands,
-        scale=scale,
-        norm=melfb_norm,
-        freq_range=freq_range
+        mfb_nbands=nbands,
+        mfb_scale=scale,
+        mfb_norm=melfb_norm,
+        mfb_freqrange=freq_range
     );
 
     if get_only_melfreq
@@ -125,7 +126,7 @@ function afe(x::AbstractVector{Float64}, audioparams::NamedTuple; get_only_melfr
     melspec =  get_melspec(
         stft=stftspec,
         fbank=melfb,
-        db_scale=db_scale
+        mel_dbscale=db_scale
     );
 
     if audioparams.usemfcc
@@ -162,8 +163,8 @@ function afe(x::AbstractVector{Float64}, audioparams::NamedTuple; get_only_melfr
 
     hcat(
         filter(!isnothing, [
-            melspec.spec',
-            audioparams.usemfcc ? mfcc.mfcc' : nothing,
+            melspec.data.spec',
+            audioparams.usemfcc ? mfcc.data.spec' : nothing,
             audioparams.usef0 ? f0.f0 : nothing,
             spect.centroid,
             spect.crest,
@@ -301,7 +302,7 @@ if !loadset
     train, test = partition(eachindex(yc), train_ratio, shuffle=true)
     X_train, y_train = X[train, :], yc[train]
     X_test, y_test = X[test, :], yc[test]
-    save(dsfile, Dict("X_test" => X_test, "y_test" => y_test))
+    # save(dsfile, Dict("X_test" => X_test, "y_test" => y_test)) # for safety
 
     println("Training set size: ", size(X_train), " - ", length(y_train))
     println("Test set size: ", size(X_test), " - ", length(y_test))
@@ -310,10 +311,6 @@ end
 # ---------------------------------------------------------------------------- #
 #                                train a model                                 #
 # ---------------------------------------------------------------------------- #
-
-# usa unitful per union intero e oggetto unitful{tempo} se passano un tempo lo pacci a intero
-# perchè gio vuole che siano in secondi
-
 if !loadset
     learned_dt_tree = begin
         model = ModalDecisionTree(; relations = :IA7, features = metaconditions)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
@@ -330,7 +327,7 @@ if !loadset
     _, mtree = report(mach).sprinkle(X_test, y_test)
     sole_dt = ModalDecisionTrees.translate(mtree)
     # Save solemodel to disk
-    save(jld2file, Dict("metaconditions" => metaconditions, "sole_dt" => sole_dt))
+    # save(jld2file, Dict("metaconditions" => metaconditions, "sole_dt" => sole_dt)) # for safety
 else
     @info("Load dataset...")
     d = jldopen(dsfile)
@@ -342,37 +339,10 @@ else
     close(d)
 end
 
-printmodel(sole_dt; show_metrics = true, variable_names_map=variable_names);
+printmodel(sole_dt; show_metrics=true, silent=true, syntaxstring_kwargs=(; threshold_digits=2), variable_names_map=variable_names);
 
 # ---------------------------------------------------------------------------- #
 #      extract rules that are at least as good as a random baseline model      #
-# ---------------------------------------------------------------------------- #
-interesting_rules = listrules(sole_dt, min_lift = 1.0, min_ninstances = 0);
-printmodel.(interesting_rules; show_metrics = true, variable_names_map=variable_names);
-
-# ---------------------------------------------------------------------------- #
-#             simplify rules while extracting and prettify result              #
-# ---------------------------------------------------------------------------- #
-interesting_rules = listrules(sole_dt, min_lift = 1.0, min_ninstances = 0, normalize = true);
-printmodel.(interesting_rules; show_metrics = true, syntaxstring_kwargs = (; threshold_digits = 2), variable_names_map=variable_names);
-
-# ---------------------------------------------------------------------------- #
-#                        directly access rule metrics                          #
-# ---------------------------------------------------------------------------- #
-readmetrics.(interesting_rules)
-
-# ---------------------------------------------------------------------------- #
-# show rules with an additional metric (syntax height of the rule's antecedent)#
-# ---------------------------------------------------------------------------- #
-printmodel.(sort(interesting_rules, by = readmetrics); show_metrics = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))), variable_names_map=variable_names);
-
-# ---------------------------------------------------------------------------- #
-#                    pretty table of rules and their metrics                   #
-# ---------------------------------------------------------------------------- #
-metricstable(interesting_rules; variable_names_map=variable_names, metrics_kwargs = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))))
-
-# ---------------------------------------------------------------------------- #
-#                                  inspect rules                               #
 # ---------------------------------------------------------------------------- #
 interesting_rules = listrules(sole_dt,
 	min_lift = 1.0,
@@ -383,7 +353,20 @@ interesting_rules = listrules(sole_dt,
     variable_names_map=variable_names
 );
 map(r->(consequent(r), readmetrics(r)), interesting_rules)
-printmodel.(interesting_rules; show_metrics = true, syntaxstring_kwargs = (; threshold_digits = 2), variable_names_map=variable_names)
+
+readmetrics.(interesting_rules)
+
+printmodel.(
+    sort(interesting_rules, by = readmetrics); 
+    show_metrics = (; round_digits = 2, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))), 
+    syntaxstring_kwargs = (; threshold_digits = 2), 
+    variable_names_map=variable_names
+);
+
+# ---------------------------------------------------------------------------- #
+#                    pretty table of rules and their metrics                   #
+# ---------------------------------------------------------------------------- #
+metricstable(interesting_rules; variable_names_map=variable_names, metrics_kwargs = (; round_digits = nothing, additional_metrics = (; height = r->SoleLogics.height(antecedent(r)))))
 
 # ---------------------------------------------------------------------------- #
 #                             precomputing logiset                             #
@@ -427,11 +410,11 @@ in verde quelli azzeccati, in rosso quelli sbagliati.
 un plot per feature
 segnando una riga per il valore, maggiore o minore ritenuto valido
 """
-for interesting_rule in interesting_rules
+# for interesting_rule in interesting_rules
 
-end
+# end
 
-interesting_part_of_X_test = X_test[:,interesting_variables]
+# interesting_part_of_X_test = X_test[:,interesting_variables]
 
 
 
