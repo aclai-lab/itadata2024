@@ -230,7 +230,7 @@ else
     close(d)
 end
 
-printmodel(sole_dt; show_metrics=true, silent=true, syntaxstring_kwargs=(; threshold_digits=2), variable_names_map=variable_names);
+printmodel(sole_dt; show_metrics=true, syntaxstring_kwargs=(; threshold_digits=2), variable_names_map=variable_names);
 
 # ---------------------------------------------------------------------------- #
 #      extract rules that are at least as good as a random baseline model      #
