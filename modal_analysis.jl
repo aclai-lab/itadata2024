@@ -1,7 +1,7 @@
 using Pkg
 Pkg.activate(".")
 using MLJ, ModalDecisionTrees
-using SoleDecisionTreeInterface, Sole, SoleData, SoleBase
+using SoleDecisionTreeInterface, Sole, SoleData
 using CategoricalArrays
 using DataFrames, JLD2, CSV
 using Audio911
