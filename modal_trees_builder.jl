@@ -13,32 +13,31 @@ using Plots
 # ---------------------------------------------------------------------------- #
 #                                   settings                                   #
 # ---------------------------------------------------------------------------- #
-@info("Arguments recieved:")
-println("experiment: ", ARGS[1], ", scale: ", ARGS[2], ", usemfcc: ", ARGS[3])
+# @info("Arguments recieved:")
+# println("experiment: ", ARGS[1], ", scale: ", ARGS[2], ", usemfcc: ", ARGS[3])
 
-experiment = Symbol(ARGS[1])
-# experiment = :Pneumonia
+# experiment = Symbol(ARGS[1])
+experiment = :Pneumonia
 # experiment = :Bronchiectasis
 # experiment = :COPD
 # experiment = :URTI
 # experiment = :Bronchiolitis
 
-scale = Symbol(ARGS[2])
+# scale = Symbol(ARGS[2])
 # scale = :semitones
-# scale = :mel_htk
+scale = :mel_htk
 
 features = :catch9
 # features = :minmax
 # features = :custom
 
-usemfcc = parse(Bool, ARGS[3])
-
 sr = 8000
 
-usemfcc ? featset = (:mfcc,) : featset = ()
-# featset = (:mfcc,)
-# featset = (:f0,)
-# featset = (:mfcc, :f0)
+# usemfcc = parse(Bool, ARGS[3])
+# usemfcc ? featset = (:mfcc,) : featset = ()
+# featset = (:mfcc, :spectrals)
+# featset = (:f0, :spectrals)
+featset = (:mfcc, :f0, :spectrals)
 
 audioparams = (
     sr = sr,
@@ -108,7 +107,7 @@ memguard && begin
     y = y[indices]
 end
 
-freq = round.(Int, afe(x[1, :audio]; featset=(:get_only_freqs), audioparams...))
+freq = round.(Int, audio_features(x[1, :audio], audioparams.sr; featset=(:get_only_freqs), audioparams...))
 
 variable_names = vcat(
     ["\e[$(color_code[:yellow])mmel$i=$(freq[i])Hz\e[0m" for i in 1:audioparams.mel_nbands],
@@ -184,7 +183,7 @@ end
 X = DataFrame([name => Vector{Float64}[] for name in [match(r_select, v)[1] for v in variable_names]])
 
 for i in 1:nrow(x)
-    audiofeats = collect(eachcol(afe(x[i, :audio]; featset=featset, audioparams...)))
+    audiofeats = collect(eachcol(audio_features(x[i, :audio], audioparams.sr; featset=featset, audioparams...)))
     # perform moving windows on mean
     audiowindowed = movingwindowmean.(audiofeats; nwindows = 20, relative_overlap = 0.05)
     push!(X, audiowindowed)

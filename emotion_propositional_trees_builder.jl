@@ -13,16 +13,12 @@ using Plots
 # ---------------------------------------------------------------------------- #
 #                                    settings                                  #
 # ---------------------------------------------------------------------------- #
-experiment = :Pneumonia
-# experiment = :Bronchiectasis
-# experiment = :COPD
-# experiment = :URTI
-# experiment = :Bronchiolitis
+experiment = :Emotion2
 
 scale = :semitones
 # scale = :mel_htk
 
-featset = (:mfcc, :f0, :spectrals)
+featset = ()
 # featset = (:mfcc,)
 # featset = (:f0,)
 # featset = (:mfcc, :f0)
@@ -35,7 +31,7 @@ sr = 8000
 
 audioparams = (
     sr = sr,
-    nfft = 512,
+    nfft = 256,
     mel_scale = scale, # :mel_htk, :mel_slaney, :erb, :bark, :semitones, :tuned_semitones
     mel_nbands = scale == :semitones ? 14 : 26,
     mfcc_ncoeffs = scale == :semitones ? 7 : 13,
@@ -44,7 +40,7 @@ audioparams = (
     audio_norm = true,
 )
 
-avail_exp = [:Pneumonia, :Bronchiectasis, :COPD, :URTI, :Bronchiolitis]
+avail_exp = [:Emotion2, :Emotion8]
 
 @assert experiment in avail_exp "Unknown type of experiment: $experiment."
 
@@ -69,7 +65,7 @@ x, y = d["dataframe_validated"]
 @assert x isa DataFrame
 close(d)
 
-freq = round.(Int, audio_features(x[1, :audio], audioparams.sr; featset=(:get_only_freqs), audioparams...))
+freq = round.(Int, afe(x[1, :audio]; featset=(:get_only_freqs), audioparams...))
 
 catch9_f = ["max", "min", "mean", "med", "std", "bsm", "bsd", "qnt", "3ac"]
 variable_names = vcat([
@@ -100,7 +96,7 @@ catch9 = [
 @info("Build dataset...")
 
 X = DataFrame([name => Float64[] for name in [match(r_select, v)[1] for v in variable_names]])
-audiofeats = [audio_features(row[:audio], audioparams.sr; featset=featset, audioparams...) for row in eachrow(x)]
+audiofeats = [afe(row[:audio]; featset=featset, audioparams...) for row in eachrow(x)]
 push!(X, vcat([vcat([map(func, eachcol(row)) for func in catch9]...) for row in audiofeats])...)
 
 yc = CategoricalArray(y);
@@ -118,13 +114,13 @@ println("Test set size: ", size(X_test), " - ", length(y_test))
 # ---------------------------------------------------------------------------- #
 #                                  train a model                               #
 # ---------------------------------------------------------------------------- #
-# learned_dt_tree = begin
+learned_dt_tree = begin
     Tree = MLJ.@load DecisionTreeClassifier pkg=DecisionTree
     model = Tree(max_depth=-1, )
     mach = machine(model, X_train, y_train)
     fit!(mach)
-    learned_dt_tree = fitted_params(mach).tree
-# end
+    fitted_params(mach).tree
+end
 
 # ---------------------------------------------------------------------------- #
 #                         model inspection & rule study                        #
